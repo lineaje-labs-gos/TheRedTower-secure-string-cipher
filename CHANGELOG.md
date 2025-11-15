@@ -18,12 +18,15 @@
   - Smart confirmation: auto-generated passwords skip confirmation prompt
   - Comprehensive integration tests covering all scenarios
 
-### Changed  
+### Changed
 - Updated Python version classifiers in package metadata
 - Streamlined CI/CD to test only supported Python versions
 - Removed Python 3.10-specific test workarounds
 
 ## [Unreleased]
+- **Testing Improvements**:
+  - Added focused CLI unit tests to verify the inline "save to vault" workflow.
+  - Hardened the secure temp file test so it reliably simulates unwritable directories even when the suite runs as root.
   - **UX Enhancement**: Type `/gen`, `/generate`, or `/g` at any password prompt to instantly generate a strong passphrase
   - **Seamless Workflow**: No need to exit encryption flow to generate passwords
   - **Auto-generation**: Creates alphanumeric passphrases with symbols (155+ bits entropy)
@@ -62,7 +65,7 @@
   - **Development Strategy Update**:
     - **Primary development target**: Python 3.14 (latest stable)
     - **Backward compatibility**: Maintained to Python 3.10+
-    - **CI/CD Optimization**: 
+    - **CI/CD Optimization**:
       - Split quality checks (2-3 min) from test matrix (3-5 min) for faster feedback
       - Parallel test execution with `pytest-xdist` (~32% faster)
       - Early failure detection (`--maxfail=3`)
@@ -267,4 +270,3 @@
 - Route all CLI I/O through provided streams; avoid writing to `sys.__stdout__`.
 - Error message consistency: wrap invalid base64 during text decryption into `CryptoError("Text decryption failed")`.
 - Tidy: removed unused helper and imports in `src/secure_string_cipher/cli.py`. Enabled previously skipped CLI tests.
-

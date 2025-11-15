@@ -8,8 +8,6 @@ getpass.getpass so tests that patch stdin/stdout can drive the flows.
 import sys
 from typing import TextIO
 
-from wcwidth import wcswidth
-
 from .core import decrypt_file, decrypt_text, encrypt_file, encrypt_text
 from .passphrase_generator import generate_passphrase
 from .passphrase_manager import PassphraseVault
@@ -49,6 +47,12 @@ def _get_mode(in_stream: TextIO, out_stream: TextIO) -> int | None:
 
     Uses provided in_stream/out_stream for testability.
     """
+    try:
+        from wcwidth import wcswidth
+    except ImportError:
+        # Fallback to len() if wcwidth is not available
+        wcswidth = len
+
     # --- Programmatically build the menu with wcwidth for proper Unicode handling ---
     WIDTH = 70
 
@@ -157,6 +161,54 @@ def _get_input(mode: int, in_stream: TextIO, out_stream: TextIO) -> str:
     return path.rstrip("\n")
 
 
+def _offer_vault_storage(
+    passphrase: str, in_stream: TextIO, out_stream: TextIO
+) -> None:
+    """Prompt the user to store a generated passphrase in the vault."""
+
+    out_stream.write("\n💾 Store this passphrase in vault? (y/n) [n]: ")
+    out_stream.flush()
+    store_choice = in_stream.readline().rstrip("\n").lower()
+
+    if store_choice not in {"y", "yes"}:
+        return
+
+    vault = PassphraseVault()
+
+    out_stream.write("Enter a label for this passphrase (e.g., 'project-x'): ")
+    out_stream.flush()
+    label = in_stream.readline().rstrip("\n")
+
+    if not label:
+        out_stream.write(
+            "⚠️  Label is required to store passphrase. Skipping vault save.\n"
+        )
+        out_stream.flush()
+        return
+
+    out_stream.write("Enter master password to encrypt vault: ")
+    out_stream.flush()
+    master_pw = in_stream.readline().rstrip("\n")
+
+    if not master_pw:
+        out_stream.write(
+            "⚠️  Master password is required to store passphrase. Skipping vault save.\n"
+        )
+        out_stream.flush()
+        return
+
+    try:
+        vault.store_passphrase(label, passphrase, master_pw)
+        out_stream.write(
+            colorize(f"✅ Passphrase '{label}' stored in vault!\n", "green")
+        )
+        out_stream.write(f"Vault location: {vault.get_vault_path()}\n")
+        out_stream.flush()
+    except Exception as e:
+        out_stream.write(f"⚠️  Could not store in vault: {e}\n")
+        out_stream.flush()
+
+
 def _handle_generate_passphrase_inline(
     in_stream: TextIO, out_stream: TextIO
 ) -> str | None:
@@ -183,36 +235,7 @@ def _handle_generate_passphrase_inline(
         out_stream.write(f"Entropy: {entropy:.1f} bits\n")
         out_stream.flush()
 
-        # Offer to store in vault
-        out_stream.write("\n💾 Store this passphrase in vault? (y/n) [n]: ")
-        out_stream.flush()
-        store_choice = in_stream.readline().rstrip("\n").lower()
-
-        if store_choice in ("y", "yes"):
-            vault = PassphraseVault()
-
-            out_stream.write("Enter a label for this passphrase (e.g., 'project-x'): ")
-            out_stream.flush()
-            label = in_stream.readline().rstrip("\n")
-
-            if label:
-                out_stream.write("Enter master password to encrypt vault: ")
-                out_stream.flush()
-                master_pw = in_stream.readline().rstrip("\n")
-
-                if master_pw:
-                    try:
-                        vault.store_passphrase(label, passphrase, master_pw)
-                        out_stream.write(
-                            colorize(
-                                f"✅ Passphrase '{label}' stored in vault!\n", "green"
-                            )
-                        )
-                        out_stream.write(f"Vault location: {vault.get_vault_path()}\n")
-                        out_stream.flush()
-                    except Exception as e:
-                        out_stream.write(f"⚠️  Could not store in vault: {e}\n")
-                        out_stream.flush()
+        _offer_vault_storage(passphrase, in_stream, out_stream)
 
         out_stream.write(
             colorize("\n✅ Using this passphrase for current operation...\n", "green")
@@ -419,8 +442,8 @@ def _handle_generate_passphrase(in_stream: TextIO, out_stream: TextIO) -> None:
         out_stream.write(colorize("\n✅ Generated Passphrase:", "green") + "\n")
         out_stream.write(f"{passphrase}\n\n")
         out_stream.write(f"Entropy: {entropy:.1f} bits\n")
+        _offer_vault_storage(passphrase, in_stream, out_stream)
         out_stream.write("\n⚠️  Please save this passphrase securely!\n")
-        out_stream.write("You can also store it in the encrypted vault (option 6).\n")
         out_stream.flush()
     except Exception as e:
         out_stream.write(f"Error generating passphrase: {e}\n")

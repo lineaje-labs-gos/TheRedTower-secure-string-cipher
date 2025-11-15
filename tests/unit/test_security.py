@@ -628,12 +628,23 @@ class TestSecureTempFile:
             with create_secure_temp_file(directory="/nonexistent/path"):
                 pass
 
-    def test_create_secure_temp_file_unwritable_directory(self, tmp_path):
+    def test_create_secure_temp_file_unwritable_directory(self, tmp_path, monkeypatch):
         """Test error when directory is not writable."""
         # Create a directory and make it read-only
         readonly_dir = tmp_path / "readonly"
         readonly_dir.mkdir()
         readonly_dir.chmod(0o444)
+
+        import secure_string_cipher.security as security_module
+
+        original_access = security_module.os.access
+
+        def _fake_access(path, mode):
+            if Path(path) == readonly_dir:
+                return False
+            return original_access(path, mode)
+
+        monkeypatch.setattr(security_module.os, "access", _fake_access)
 
         try:
             with pytest.raises(SecurityError, match="not writable"):
@@ -711,15 +722,11 @@ class TestSecureAtomicWrite:
         with pytest.raises(SecurityError, match="does not exist"):
             secure_atomic_write(dest, b"data")
 
-    @pytest.mark.skipif(
-        os.getuid() == 0 if hasattr(os, "getuid") else False,
-        reason="Cannot test directory permissions as root",
-    )
-    def test_secure_atomic_write_unwritable_directory(self, tmp_path):
+    def test_secure_atomic_write_unwritable_directory(self, tmp_path, monkeypatch):
         """Test error when parent directory is not writable.
 
-        Note: This test is skipped in environments where permission restrictions
-        don't work (root user, certain CI containers, etc.)
+        Uses a monkeypatched os.access result so the logic holds even when
+        running as root inside locked-down CI containers.
         """
         # Create a read-only directory
         readonly_dir = tmp_path / "readonly"
@@ -731,26 +738,21 @@ class TestSecureAtomicWrite:
         except (OSError, PermissionError):
             pytest.skip("Environment does not support chmod on directories")
 
-        # Verify the directory is actually read-only by checking os.access
-        # If os.access still reports writable, skip the test
-        if os.access(readonly_dir, os.W_OK):
-            readonly_dir.chmod(0o755)  # Restore for cleanup
-            pytest.skip("Environment does not respect directory write permissions")
+        import secure_string_cipher.security as security_module
 
-        dest = readonly_dir / "test.txt"
+        original_access = security_module.os.access
+
+        def _fake_access(path, mode):
+            if Path(path) == readonly_dir:
+                return False
+            return original_access(path, mode)
+
+        monkeypatch.setattr(security_module.os, "access", _fake_access)
 
         try:
-            with pytest.raises((SecurityError, PermissionError)) as exc_info:
-                secure_atomic_write(dest, b"data")
-
-            # We expect either a SecurityError from our check or a PermissionError
-            # from the OS if the check wasn't sufficient
-            assert (
-                "not writable" in str(exc_info.value).lower()
-                or "permission denied" in str(exc_info.value).lower()
-            )
+            with pytest.raises(SecurityError, match="not writable"):
+                secure_atomic_write(readonly_dir / "test.txt", b"data")
         finally:
-            # Restore permissions for cleanup
             try:
                 readonly_dir.chmod(0o755)
             except (OSError, PermissionError):

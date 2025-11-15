@@ -7,7 +7,13 @@ import io
 
 import pytest
 
-from secure_string_cipher.cli import _get_mode
+import secure_string_cipher.cli as cli
+from secure_string_cipher.cli import (
+    _get_mode,
+    _handle_generate_passphrase,
+    _handle_generate_passphrase_inline,
+    _offer_vault_storage,
+)
 
 
 class TestMenuDisplay:
@@ -377,3 +383,166 @@ class TestEdgeCases:
         assert result == 0
         output = out_stream.getvalue()
         assert "Invalid choice" in output
+
+
+class TestVaultStoragePrompt:
+    """Ensure freshly generated passphrases can be stored immediately."""
+
+    def test_offer_vault_storage_saves_when_inputs_provided(
+        self, tmp_path, monkeypatch
+    ):
+        """User can immediately store a generated passphrase in the vault."""
+
+        class DummyVault:
+            def __init__(self) -> None:
+                self.calls: list[tuple[str, str, str]] = []
+                self.path = tmp_path / "vault.enc"
+
+            def store_passphrase(
+                self, label: str, passphrase: str, master: str
+            ) -> None:
+                self.calls.append((label, passphrase, master))
+
+            def get_vault_path(self) -> str:
+                return str(self.path)
+
+        dummy_vault = DummyVault()
+        monkeypatch.setattr(cli, "PassphraseVault", lambda: dummy_vault)
+
+        in_stream = io.StringIO("y\nbackup\nMasterPassword!\n")
+        out_stream = io.StringIO()
+
+        _offer_vault_storage("auto-generated-pass", in_stream, out_stream)
+
+        assert dummy_vault.calls == [
+            ("backup", "auto-generated-pass", "MasterPassword!")
+        ]
+
+        output = out_stream.getvalue()
+        assert "stored in vault" in output
+        assert str(dummy_vault.path) in output
+
+    def test_offer_vault_storage_requires_label(self, monkeypatch):
+        """Empty labels are rejected and nothing is stored."""
+
+        class DummyVault:
+            def __init__(self) -> None:
+                self.calls: list[tuple[str, str, str]] = []
+
+            def store_passphrase(
+                self, label: str, passphrase: str, master: str
+            ) -> None:
+                self.calls.append((label, passphrase, master))
+
+            def get_vault_path(self) -> str:  # pragma: no cover - unused in this test
+                return "unused"
+
+        dummy_vault = DummyVault()
+        monkeypatch.setattr(cli, "PassphraseVault", lambda: dummy_vault)
+
+        in_stream = io.StringIO("y\n\n")
+        out_stream = io.StringIO()
+
+        _offer_vault_storage("pass", in_stream, out_stream)
+
+        assert dummy_vault.calls == []
+        output = out_stream.getvalue()
+        assert "Label is required" in output
+
+    def test_offer_vault_storage_requires_master_password(self, monkeypatch):
+        """Skipping master password cancels storage."""
+
+        class DummyVault:
+            def __init__(self) -> None:
+                self.calls: list[tuple[str, str, str]] = []
+
+            def store_passphrase(
+                self, label: str, passphrase: str, master: str
+            ) -> None:
+                self.calls.append((label, passphrase, master))
+
+            def get_vault_path(self) -> str:  # pragma: no cover - unused in this test
+                return "unused"
+
+        dummy_vault = DummyVault()
+        monkeypatch.setattr(cli, "PassphraseVault", lambda: dummy_vault)
+
+        in_stream = io.StringIO("y\nproject\n\n")
+        out_stream = io.StringIO()
+
+        _offer_vault_storage("pass", in_stream, out_stream)
+
+        assert dummy_vault.calls == []
+        output = out_stream.getvalue()
+        assert "Master password is required" in output
+
+    def test_offer_vault_storage_decline_skips_prompt(self, monkeypatch):
+        """Declining storage returns without creating a vault instance."""
+
+        def _fail_ctor():  # pragma: no cover - used to ensure not constructed
+            raise AssertionError("PassphraseVault should not be instantiated")
+
+        monkeypatch.setattr(cli, "PassphraseVault", _fail_ctor)
+
+        in_stream = io.StringIO("n\n")
+        out_stream = io.StringIO()
+
+        _offer_vault_storage("pass", in_stream, out_stream)
+
+        output = out_stream.getvalue()
+        assert "Store this passphrase" in output
+
+
+class TestGeneratePassphraseHandlers:
+    """Ensure both generation paths surface the inline vault prompt."""
+
+    def test_inline_generation_offers_vault_storage(self, monkeypatch):
+        """Inline helper should always offer to store the new passphrase."""
+
+        captured: dict[str, str] = {}
+
+        def _fake_generate(strategy: str) -> tuple[str, float]:
+            captured["strategy"] = strategy
+            return "InlinePass", 150.0
+
+        def _fake_offer(passphrase: str, in_stream, out_stream) -> None:
+            captured["offered"] = passphrase
+            out_stream.write("offer-called\n")
+
+        monkeypatch.setattr(cli, "generate_passphrase", _fake_generate)
+        monkeypatch.setattr(cli, "_offer_vault_storage", _fake_offer)
+
+        in_stream = io.StringIO("")
+        out_stream = io.StringIO()
+
+        result = _handle_generate_passphrase_inline(in_stream, out_stream)
+
+        assert result == "InlinePass"
+        assert captured["strategy"] == "alphanumeric"
+        assert captured["offered"] == "InlinePass"
+        assert "offer-called" in out_stream.getvalue()
+
+    def test_menu_generation_offers_vault_storage(self, monkeypatch):
+        """Full-screen generator reuses the inline vault prompt helper."""
+
+        captured: dict[str, str] = {}
+
+        def _fake_generate(strategy: str) -> tuple[str, float]:
+            captured["strategy"] = strategy
+            return "MenuPass", 128.0
+
+        def _fake_offer(passphrase: str, in_stream, out_stream) -> None:
+            captured["offered"] = passphrase
+            out_stream.write("offer-called\n")
+
+        monkeypatch.setattr(cli, "generate_passphrase", _fake_generate)
+        monkeypatch.setattr(cli, "_offer_vault_storage", _fake_offer)
+
+        in_stream = io.StringIO("2\n")  # Choose alphanumeric strategy
+        out_stream = io.StringIO()
+
+        _handle_generate_passphrase(in_stream, out_stream)
+
+        assert captured["strategy"] == "alphanumeric"
+        assert captured["offered"] == "MenuPass"
+        assert "offer-called" in out_stream.getvalue()
