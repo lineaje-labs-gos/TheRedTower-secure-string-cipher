@@ -511,7 +511,14 @@ def secure_atomic_write(
     destination = Path(destination)
 
     # Validate destination path
-    if destination.exists():
+    try:
+        dest_exists = destination.exists()
+    except OSError:
+        # If we can't check existence due to permissions, treat as not existing
+        # (since we likely can't write to it anyway)
+        dest_exists = False
+
+    if dest_exists:
         if not os.access(destination, os.W_OK):
             raise SecurityError(f"Destination file is not writable: {destination}")
 
