@@ -86,7 +86,7 @@ jobs:
     - name: Run tests (with coverage on 3.14)
       run: |
         if [ "${{ matrix.python-version }}" = "3.14" ]; then
-          pytest tests/ --cov=secure_string_cipher --cov-report=xml --maxfail=3 -n auto
+          pytest tests/ --cov=secure_string_cipher --cov-report=term-missing --cov-report=html:htmlcov --cov-report=json:coverage.json --cov-report=xml --cov-fail-under=69 --maxfail=3 -n auto
         else
           pytest tests/ --maxfail=3 -n auto
         fi

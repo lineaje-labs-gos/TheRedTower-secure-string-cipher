@@ -109,11 +109,6 @@ addopts = [
     "--strict-markers",
     "--strict-config",
     "--tb=short",
-    "--cov=src/secure_string_cipher",
-    "--cov-report=term-missing",
-    "--cov-report=html:htmlcov",
-    "--cov-report=json:coverage.json",
-    "--cov-fail-under=69",
     "--timeout=30",
     "--maxfail=5",
 ]
