@@ -105,6 +105,30 @@ This feature:
 - Skips confirmation since you already saw the generated password
 - Works seamlessly without leaving the encryption flow
 
+### Passphrase Vault Workflows
+
+- **Auto-store prompt (option 5 or `/gen`):** Every time you generate a passphrase—either from menu option 5 or by typing `/gen` at a password prompt—the CLI immediately offers to store it in the vault. Answer `y` and you will be asked for a label plus the vault's master password; the passphrase is encrypted and written to `~/.secure-cipher/passphrase_vault.enc` with backups in `~/.secure-cipher/backups/`.
+- **Manual storage (option 6):** Already have a passphrase you want to save? Choose option 6 to provide the label, passphrase, and master password manually.
+- **Retrieval & maintenance (options 7-9):** Fetch stored secrets, list all labels, or update/delete entries without leaving the CLI. All operations require the master password and enforce vault integrity checks (HMAC + automatic backups).
+
+### Upgrading
+
+Use pipx (recommended) or pip to upgrade to the latest released build:
+
+```bash
+pipx upgrade secure-string-cipher
+# or
+pip install --upgrade secure-string-cipher
+```
+
+Verify the version that is installed:
+
+```bash
+pip show secure-string-cipher | grep Version
+```
+
+Release 1.0.17 (and newer) includes the inline `/gen` prompt plus the vault menu actions described above. If `pip` reports you are already up to date but you are missing these features, ensure you are pointing at the same Python interpreter that runs `cipher-start` and rerun the upgrade command.
+
 ## Docker
 
 Use the pre-built image (Python 3.14-alpine based):

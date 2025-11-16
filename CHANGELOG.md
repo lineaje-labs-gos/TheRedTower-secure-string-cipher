@@ -1,36 +1,15 @@
 # Changelog
 
-## [1.0.16] - 2025-11-16
+## [Unreleased]
+- _No changes yet_
 
-### Breaking Changes
-- **Python 3.12+ Required**: Dropped support for Python 3.10 and 3.11
-  - Minimum version is now Python 3.12
-  - CI/CD only tests 3.12, 3.13, and 3.14
-  - Follows Python's official support timeline (3.10 EOL Oct 2026, 3.11 EOL Oct 2027)
-  - Allows use of modern Python features and improved type hints
+## [1.0.17] - 2025-11-17
 
 ### Added
-- **Inline Passphrase Generation**:
-  - Type `/gen`, `/generate`, or `/g` at any password prompt to instantly generate a strong passphrase
-  - Seamless workflow with no need to exit encryption flow
-  - Auto-generates alphanumeric passphrases with symbols (155+ bits entropy)
-  - Optional vault storage offered immediately after generation
-  - Smart confirmation: auto-generated passwords skip confirmation prompt
-  - Comprehensive integration tests covering all scenarios
+- CLI auto-store prompt now ships in a public release. Whenever you generate a passphrase (option 5 or `/gen`), you can immediately encrypt it into the vault without leaving the workflow.
+- README now documents the full vault flow (options 5-9), highlights the integrity safeguards, and explains how to upgrade/verify that this build is installed.
 
-### Fixed
-- **Python 3.12 Compatibility**: Fixed `secure_atomic_write()` filesystem permission handling
-  - Changed exception handling from `PermissionError` to `OSError` for `Path.exists()` calls
-  - Prevents test failures on Python 3.12 when checking file existence in restricted directories
-  - Maintains security while ensuring cross-version compatibility
-  - Test suite: 210 tests pass across Python 3.12-3.14
-
-### Changed
-- Updated Python version classifiers in package metadata
-- Streamlined CI/CD to test only supported Python versions
-- Removed Python 3.10-specific test workarounds
-
-## [Unreleased]
+### Details
 - **Testing Improvements**:
   - Added focused CLI unit tests to verify the inline "save to vault" workflow.
   - Hardened the secure temp file test so it reliably simulates unwritable directories even when the suite runs as root.
@@ -93,6 +72,36 @@
     - Added persistent volume mapping to `$HOME/.secure-cipher-docker`
     - Updated release workflow to build multi-arch images (amd64, arm64)
     - Automated Docker image publishing to GHCR on release tags
+
+## [1.0.16] - 2025-11-16
+
+### Breaking Changes
+- **Python 3.12+ Required**: Dropped support for Python 3.10 and 3.11
+  - Minimum version is now Python 3.12
+  - CI/CD only tests 3.12, 3.13, and 3.14
+  - Follows Python's official support timeline (3.10 EOL Oct 2026, 3.11 EOL Oct 2027)
+  - Allows use of modern Python features and improved type hints
+
+### Added
+- **Inline Passphrase Generation**:
+  - Type `/gen`, `/generate`, or `/g` at any password prompt to instantly generate a strong passphrase
+  - Seamless workflow with no need to exit encryption flow
+  - Auto-generates alphanumeric passphrases with symbols (155+ bits entropy)
+  - Optional vault storage offered immediately after generation
+  - Smart confirmation: auto-generated passwords skip confirmation prompt
+  - Comprehensive integration tests covering all scenarios
+
+### Fixed
+- **Python 3.12 Compatibility**: Fixed `secure_atomic_write()` filesystem permission handling
+  - Changed exception handling from `PermissionError` to `OSError` for `Path.exists()` calls
+  - Prevents test failures on Python 3.12 when checking file existence in restricted directories
+  - Maintains security while ensuring cross-version compatibility
+  - Test suite: 210 tests pass across Python 3.12-3.14
+
+### Changed
+- Updated Python version classifiers in package metadata
+- Streamlined CI/CD to test only supported Python versions
+- Removed Python 3.10-specific test workarounds
 
 ## 1.0.11 (2025-11-06)
 
