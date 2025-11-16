@@ -1,6 +1,6 @@
 # Changelog
 
-## [1.0.16] - 2025-11-12
+## [1.0.16] - 2025-11-16
 
 ### Breaking Changes
 - **Python 3.12+ Required**: Dropped support for Python 3.10 and 3.11
@@ -18,6 +18,13 @@
   - Smart confirmation: auto-generated passwords skip confirmation prompt
   - Comprehensive integration tests covering all scenarios
 
+### Fixed
+- **Python 3.12 Compatibility**: Fixed `secure_atomic_write()` filesystem permission handling
+  - Changed exception handling from `PermissionError` to `OSError` for `Path.exists()` calls
+  - Prevents test failures on Python 3.12 when checking file existence in restricted directories
+  - Maintains security while ensuring cross-version compatibility
+  - Test suite: 210 tests pass across Python 3.12-3.14
+
 ### Changed
 - Updated Python version classifiers in package metadata
 - Streamlined CI/CD to test only supported Python versions
@@ -27,6 +34,7 @@
 - **Testing Improvements**:
   - Added focused CLI unit tests to verify the inline "save to vault" workflow.
   - Hardened the secure temp file test so it reliably simulates unwritable directories even when the suite runs as root.
+  - **Security Fix**: Fixed `secure_atomic_write()` to handle PermissionError when checking file existence in unreadable directories (Python 3.12 compatibility)
   - **UX Enhancement**: Type `/gen`, `/generate`, or `/g` at any password prompt to instantly generate a strong passphrase
   - **Seamless Workflow**: No need to exit encryption flow to generate passwords
   - **Auto-generation**: Creates alphanumeric passphrases with symbols (155+ bits entropy)
