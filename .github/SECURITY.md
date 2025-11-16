@@ -17,7 +17,7 @@ We actively support the following versions with security updates:
 We follow Python's official support timeline and drop support for versions that have reached end-of-life or are in security-only mode:
 
 - **Python 3.10**: EOL October 2026 (no longer supported by this project)
-- **Python 3.11**: EOL October 2027 (no longer supported by this project)  
+- **Python 3.11**: EOL October 2027 (no longer supported by this project)
 - **Python 3.12**: EOL October 2028 ✅
 - **Python 3.13**: EOL October 2029 ✅
 - **Python 3.14**: EOL October 2030 ✅
@@ -50,7 +50,7 @@ We take security bugs seriously. Thanks for helping us keep this project secure.
 
 1. **Initial response:** Within 24 hours
 2. **Status updates:** At least every 72 hours
-3. **Fix timeline:** 
+3. **Fix timeline:**
    - We'll publish a security advisory within 72 hours
    - Develop and test a fix within 1-2 weeks
    - Public disclosure after the fix is released (typically within 90 days)
@@ -195,5 +195,5 @@ pipdeptree -p secure-string-cipher
 
 ---
 
-**Last updated:** November 6, 2025  
+**Last updated:** November 6, 2025
 **Version:** 1.0
