@@ -1,5 +1,100 @@
 # Changelog
 
+## [1.0.27] - 2025-12-02
+
+### Test Suite Restructuring
+
+Major reorganization of the test suite into specialized directories for better maintainability and focused testing capabilities.
+
+#### New Test Directory Structure
+
+```
+tests/
+├── unit/           # Core functionality tests
+├── integration/    # End-to-end workflow tests
+├── security/       # Security-focused tests (NEW)
+├── fuzz/           # Hypothesis fuzzing tests (NEW)
+└── performance/    # Benchmark tests (NEW)
+```
+
+#### Security Tests (`tests/security/`)
+
+Moved 7 security-focused test modules (~2,800 lines):
+
+- `test_security.py` - Filename sanitization, path validation, symlink detection
+- `test_security_integration.py` - Crypto memory handling, key derivation security
+- `test_timing_safe.py` - Constant-time operations, password strength
+- `test_secure_memory.py` - SecureString/SecureBytes, memory wiping
+- `test_rate_limiter.py` - Rate limiting, exponential backoff
+- `test_audit_log.py` - Audit logging, sensitive data redaction
+- `test_key_commitment.py` - Key commitment computation and verification
+
+#### Fuzz Tests (`tests/fuzz/`)
+
+New Hypothesis-based fuzzing framework (22 tests):
+
+- **`test_fuzz_encryption.py`**:
+  - Encryption roundtrip with arbitrary text
+  - Binary data handling
+  - Unicode text (excluding surrogates)
+  - Key derivation with random inputs
+  - Decryption of garbage data (crash resistance)
+  - Mutated ciphertext authentication
+  - Edge cases: repeated characters, various sizes, null bytes
+
+- **`test_fuzz_inputs.py`**:
+  - Filename sanitization with malicious inputs
+  - Path traversal pattern resistance
+  - Password strength validation edge cases
+  - Injection attack resistance (SQL, XSS, shell, format strings)
+  - Null byte injection prevention
+
+#### Performance Benchmarks (`tests/performance/`)
+
+New benchmark suite (15 tests) measuring:
+
+- **Key derivation**: Argon2id latency (target: 300-1000ms)
+- **Text encryption**: Throughput by size (small/medium/large/xlarge)
+- **File encryption**: 100KB and 1MB file benchmarks
+- **Key commitment**: Computation and verification speed
+- **Constant-time operations**: Timing consistency verification
+- **Input validation**: Sanitization speed
+- **Summary report**: Consolidated performance metrics
+
+#### Pytest Configuration
+
+Added new marker for fuzz tests:
+
+```python
+markers = [
+    "fuzz: marks tests as fuzz tests using Hypothesis",
+    # ... existing markers
+]
+```
+
+#### Test Counts
+
+- **Total tests**: 426 → 463 (+37 new tests)
+- **Security tests**: ~180 tests (moved to dedicated directory)
+- **Fuzz tests**: 22 tests (new)
+- **Performance tests**: 15 tests (new)
+
+#### Running Specific Test Categories
+
+```bash
+# Run only security tests
+pytest tests/security/ -v
+
+# Run fuzz tests with fixed seed
+pytest tests/fuzz/ --hypothesis-seed=12345
+
+# Run performance benchmarks
+pytest tests/performance/ -v
+
+# Skip slow fuzz tests in CI
+pytest -m "not fuzz" --ignore=tests/fuzz/
+```
+
 ## [1.0.26] - 2025-12-02
 
 ### Third-Party Security Audit Preparation

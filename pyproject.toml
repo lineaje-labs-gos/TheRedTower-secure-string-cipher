@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "secure-string-cipher"
-version = "1.0.26"
+version = "1.0.27"
 authors = [
   { name = "TheRedTower", email = "security@avondenecloud.uk" },
 ]
@@ -120,6 +120,7 @@ markers = [
     "integration: marks tests as integration tests",
     "e2e: marks tests as end-to-end tests",
     "security: marks tests as security-focused tests",
+    "fuzz: marks tests as fuzz tests using Hypothesis",
     "benchmark: marks tests as performance benchmarks",
     "unit: marks tests as unit tests",
     "smoke: marks tests as smoke tests",
