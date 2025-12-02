@@ -6,8 +6,10 @@ from __future__ import annotations
 
 import base64
 import io
+import json
 import os
 import secrets
+from dataclasses import dataclass
 from typing import BinaryIO
 
 from cryptography.hazmat.backends import default_backend
@@ -21,8 +23,10 @@ from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
 from .config import (
     CHUNK_SIZE,
+    FILENAME_MAX_LENGTH,
     KDF_ITERATIONS,
     MAX_FILE_SIZE,
+    METADATA_MAGIC,
     NONCE_SIZE,
     SALT_SIZE,
     TAG_SIZE,
@@ -39,6 +43,10 @@ __all__ = [
     "decrypt_stream",
     "encrypt_file",
     "decrypt_file",
+    # v2 functions with metadata support
+    "encrypt_file_v2",
+    "decrypt_file_v2",
+    "FileMetadata",
 ]
 
 
@@ -409,3 +417,223 @@ def decrypt_file(input_path: str, output_path: str, passphrase: str) -> None:
         StreamProcessor(output_path, "wb") as w,
     ):
         decrypt_stream(r, w, passphrase)
+
+
+# =============================================================================
+# v2 File Format with Metadata Support
+# =============================================================================
+#
+# Format: MAGIC(5) + META_LEN(2 big-endian) + META_JSON + SALT(16) + NONCE(12) + CIPHERTEXT + TAG(16)
+#
+# The metadata JSON contains:
+#   - original_filename: The original filename before encryption
+#   - version: Metadata format version (currently 2)
+#
+# Legacy v1 files (without MAGIC header) are auto-detected and supported.
+# =============================================================================
+
+
+@dataclass
+class FileMetadata:
+    """Metadata stored with encrypted files."""
+
+    original_filename: str | None = None
+    version: int = 2
+
+    def to_bytes(self) -> bytes:
+        """Serialize metadata to JSON bytes."""
+        data: dict[str, str | int] = {
+            "version": self.version,
+        }
+        if self.original_filename:
+            # Truncate filename if too long
+            data["original_filename"] = self.original_filename[:FILENAME_MAX_LENGTH]
+        return json.dumps(data, separators=(",", ":")).encode("utf-8")
+
+    @classmethod
+    def from_bytes(cls, data: bytes) -> FileMetadata:
+        """Deserialize metadata from JSON bytes."""
+        try:
+            obj = json.loads(data.decode("utf-8"))
+            return cls(
+                original_filename=obj.get("original_filename"),
+                version=obj.get("version", 2),
+            )
+        except (json.JSONDecodeError, UnicodeDecodeError) as e:
+            raise CryptoError(f"Invalid metadata format: {e}") from e
+
+
+def encrypt_file_v2(
+    input_path: str,
+    output_path: str,
+    passphrase: str,
+    *,
+    store_filename: bool = True,
+) -> None:
+    """
+    Encrypt a file using AES-256-GCM with metadata support (v2 format).
+
+    The v2 format stores optional metadata including the original filename,
+    which can be restored during decryption.
+
+    Args:
+        input_path: Path to file to encrypt
+        output_path: Path for encrypted output
+        passphrase: Encryption password
+        store_filename: If True, store original filename in metadata
+
+    Raises:
+        CryptoError: If encryption fails
+    """
+    from .secure_memory import SecureBytes
+    from .timing_safe import add_timing_jitter
+
+    # Build metadata
+    metadata = FileMetadata(
+        original_filename=os.path.basename(input_path) if store_filename else None,
+        version=2,
+    )
+    meta_bytes = metadata.to_bytes()
+
+    if len(meta_bytes) > 65535:
+        raise CryptoError("Metadata too large")
+
+    try:
+        salt = secrets.token_bytes(SALT_SIZE)
+        nonce = secrets.token_bytes(NONCE_SIZE)
+
+        with SecureBytes(derive_key(passphrase, salt)) as secure_key:
+            with (
+                StreamProcessor(input_path, "rb") as r,
+                StreamProcessor(output_path, "wb") as w,
+            ):
+                # Write v2 header: MAGIC + metadata length (2 bytes big-endian) + metadata
+                w.write(METADATA_MAGIC)
+                w.write(len(meta_bytes).to_bytes(2, "big"))
+                w.write(meta_bytes)
+
+                # Write encryption header
+                w.write(salt + nonce)
+
+                # Encrypt data
+                encryptor = Cipher(
+                    algorithms.AES(secure_key.data),
+                    modes.GCM(nonce),
+                    backend=default_backend(),
+                ).encryptor()
+
+                for chunk in iter(lambda: r.read(CHUNK_SIZE), b""):
+                    w.write(encryptor.update(chunk))
+                    add_timing_jitter()
+
+                w.write(encryptor.finalize() + encryptor.tag)
+    except CryptoError:
+        raise
+    except Exception as e:
+        raise CryptoError(f"Encryption failed: {e}") from e
+
+
+def decrypt_file_v2(
+    input_path: str,
+    output_path: str | None,
+    passphrase: str,
+    *,
+    restore_filename: bool = True,
+) -> tuple[str, FileMetadata | None]:
+    """
+    Decrypt a file using AES-256-GCM with metadata support.
+
+    Automatically detects v1 (legacy) and v2 file formats.
+
+    Args:
+        input_path: Path to encrypted file
+        output_path: Path for decrypted output (if None, uses original filename or input_path + ".dec")
+        passphrase: Decryption password
+        restore_filename: If True and output_path is None, attempt to restore original filename
+
+    Returns:
+        Tuple of (actual_output_path, metadata_or_none)
+
+    Raises:
+        CryptoError: If decryption fails
+    """
+    from .security import sanitize_filename
+
+    try:
+        with open(input_path, "rb") as f:
+            # Check for v2 magic header
+            magic = f.read(len(METADATA_MAGIC))
+
+            if magic == METADATA_MAGIC:
+                # v2 format with metadata
+                meta_len_bytes = f.read(2)
+                if len(meta_len_bytes) != 2:
+                    raise CryptoError("Invalid v2 file: truncated metadata length")
+                meta_len = int.from_bytes(meta_len_bytes, "big")
+
+                if meta_len > 65535:
+                    raise CryptoError("Invalid v2 file: metadata too large")
+
+                meta_bytes = f.read(meta_len)
+                if len(meta_bytes) != meta_len:
+                    raise CryptoError("Invalid v2 file: truncated metadata")
+
+                metadata = FileMetadata.from_bytes(meta_bytes)
+
+                # Read encryption header
+                header = f.read(SALT_SIZE + NONCE_SIZE)
+                if len(header) != SALT_SIZE + NONCE_SIZE:
+                    raise CryptoError("Invalid encrypted file format")
+
+                salt, nonce = header[:SALT_SIZE], header[SALT_SIZE:]
+                encrypted_data = f.read()
+
+            else:
+                # v1 format (legacy) - magic is actually start of salt
+                metadata = None
+                header = magic + f.read(SALT_SIZE + NONCE_SIZE - len(magic))
+                if len(header) != SALT_SIZE + NONCE_SIZE:
+                    raise CryptoError("Invalid encrypted file format")
+
+                salt, nonce = header[:SALT_SIZE], header[SALT_SIZE:]
+                encrypted_data = f.read()
+
+        # Determine output path
+        if output_path is None:
+            if restore_filename and metadata and metadata.original_filename:
+                # Sanitize the stored filename for security
+                safe_name = sanitize_filename(metadata.original_filename)
+                # Use sanitized name if it's valid (not empty after sanitization)
+                if safe_name:
+                    # Use the sanitized original filename in the same directory as input
+                    output_dir = os.path.dirname(input_path) or "."
+                    output_path = os.path.join(output_dir, safe_name)
+                else:
+                    # Fallback if filename is empty after sanitization
+                    output_path = input_path + ".dec"
+            else:
+                output_path = input_path + ".dec"
+
+        # Decrypt
+        if len(encrypted_data) < TAG_SIZE:
+            raise CryptoError("File too short - not a valid encrypted file")
+
+        tag = encrypted_data[-TAG_SIZE:]
+        ciphertext = encrypted_data[:-TAG_SIZE]
+        key = derive_key(passphrase, salt)
+
+        decryptor = Cipher(
+            algorithms.AES(key), modes.GCM(nonce, tag), backend=default_backend()
+        ).decryptor()
+
+        plaintext = decryptor.update(ciphertext) + decryptor.finalize()
+
+        with StreamProcessor(output_path, "wb") as w:
+            w.write(plaintext)
+
+        return output_path, metadata
+
+    except CryptoError:
+        raise
+    except Exception as e:
+        raise CryptoError(f"Decryption failed: {e}") from e

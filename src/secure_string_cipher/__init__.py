@@ -5,12 +5,15 @@ secure_string_cipher - Core encryption functionality
 from .cli import main
 from .core import (
     CryptoError,
+    FileMetadata,
     StreamProcessor,
     decrypt_file,
+    decrypt_file_v2,
     decrypt_stream,
     decrypt_text,
     derive_key,
     encrypt_file,
+    encrypt_file_v2,
     encrypt_stream,
     encrypt_text,
 )
@@ -25,12 +28,12 @@ from .timing_safe import (
 )
 from .utils import ProgressBar, colorize, handle_timeout, secure_overwrite
 
-__version__ = "1.0.18"
+__version__ = "1.0.19"
 __author__ = "TheRedTower"
 __email__ = "security@avondenecloud.uk"
 
 __all__ = [
-    # Encryption
+    # Encryption (v1 - legacy)
     "encrypt_text",
     "decrypt_text",
     "encrypt_file",
@@ -39,6 +42,10 @@ __all__ = [
     "decrypt_stream",
     "derive_key",
     "StreamProcessor",
+    # Encryption (v2 - with metadata)
+    "encrypt_file_v2",
+    "decrypt_file_v2",
+    "FileMetadata",
     # Exceptions
     "CryptoError",
     "SecurityError",

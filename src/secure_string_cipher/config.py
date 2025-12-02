@@ -2,11 +2,17 @@
 Configuration settings for secure-string-cipher
 """
 
+# Encryption parameters
 CHUNK_SIZE = 64 * 1024
 SALT_SIZE = 16
 NONCE_SIZE = 12
 TAG_SIZE = 16
 KDF_ITERATIONS = 390_000
+
+# File metadata (v2 format)
+METADATA_VERSION = 2
+METADATA_MAGIC = b"SSCV2"  # Magic bytes to identify v2 format
+FILENAME_MAX_LENGTH = 255  # Maximum stored filename length
 
 MAX_FILE_SIZE = 100 * 1024 * 1024
 MIN_PASSWORD_LENGTH = 12

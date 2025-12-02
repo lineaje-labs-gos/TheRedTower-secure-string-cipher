@@ -1,5 +1,53 @@
 # Changelog
 
+## [1.0.19] - 2025-06-24
+
+### Added - Original Filename Metadata Storage (v2 File Format)
+
+This release introduces a major enhancement: encrypted files can now store and restore original filenames securely. The new v2 file format adds metadata support while maintaining full backward compatibility with v1 files.
+
+- **v2 Encryption Format**:
+  - New file format stores metadata header: `MAGIC(5) + META_LEN(2) + META_JSON + SALT(16) + NONCE(12) + CIPHERTEXT + TAG(16)`
+  - Magic bytes (`SSCV2`) identify v2 files, enabling auto-detection
+  - Metadata stored as compact JSON with version info and original filename
+  - Filename truncated to 255 characters (configurable via `FILENAME_MAX_LENGTH`)
+
+- **New Functions in `core.py`**:
+  - `encrypt_file_v2(input_path, output_path, passphrase, store_filename=True)` - Encrypt with metadata
+  - `decrypt_file_v2(input_path, output_path, passphrase, restore_filename=True)` - Decrypt with filename restoration
+  - `FileMetadata` dataclass for metadata serialization/deserialization
+
+- **CLI Improvements**:
+  - File encryption (option 3) now stores original filename automatically
+  - File decryption (option 4) restores original filename when possible
+  - Security: Restored filenames are sanitized via `sanitize_filename()` before use
+  - User feedback shows when filename was sanitized for security
+
+- **Backward Compatibility**:
+  - v1 files (without magic header) are auto-detected and decrypted correctly
+  - `decrypt_file_v2()` returns `(path, None)` for v1 files (no metadata available)
+  - Legacy `encrypt_file()` and `decrypt_file()` remain unchanged for API stability
+
+- **Security**:
+  - Restored filenames pass through `sanitize_filename()` to prevent path traversal
+  - Invalid/empty sanitized filenames fall back to `<input>.dec` pattern
+  - HMAC-verified metadata ensures integrity
+
+- **Configuration**:
+  - `METADATA_VERSION = 2` - Current metadata format version
+  - `METADATA_MAGIC = b"SSCV2"` - Magic bytes for v2 detection
+  - `FILENAME_MAX_LENGTH = 255` - Maximum filename length in metadata
+
+- **Public API Updates**:
+  - Exported: `encrypt_file_v2`, `decrypt_file_v2`, `FileMetadata`
+  - Organized `__all__` with v1 (legacy) and v2 (metadata) sections
+
+- **Test Suite**: 210 → 225 tests (+15 new v2 metadata tests)
+  - `TestFileMetadata`: Serialization, roundtrip, truncation, error handling
+  - `TestEncryptFileV2`: Encryption with/without filename, restoration
+  - `TestV2BackwardCompatibility`: v1 file detection and decryption
+  - `TestV2ErrorHandling`: Wrong password, corrupted metadata, truncated files
+
 ## [Unreleased]
 - _No changes yet_
 

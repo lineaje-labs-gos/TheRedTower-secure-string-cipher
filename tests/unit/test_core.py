@@ -9,12 +9,16 @@ from typing import Final
 
 import pytest
 
+from secure_string_cipher.config import METADATA_MAGIC
 from secure_string_cipher.core import (
     CryptoError,
+    FileMetadata,
     StreamProcessor,
+    decrypt_file_v2,
     decrypt_stream,
     decrypt_text,
     derive_key,
+    encrypt_file_v2,
     encrypt_stream,
     encrypt_text,
 )
@@ -243,3 +247,307 @@ class TestStreamProcessor:
 
             assert sp.bytes_processed == len(test_data)
             assert data == test_data
+
+
+# =============================================================================
+# v2 File Format with Metadata Support Tests
+# =============================================================================
+
+
+class TestFileMetadata:
+    """Test FileMetadata serialization."""
+
+    def test_metadata_to_bytes(self):
+        """Test metadata serializes to JSON bytes."""
+        meta = FileMetadata(original_filename="test.txt", version=2)
+        data = meta.to_bytes()
+        assert b"test.txt" in data
+        assert b'"version":2' in data
+
+    def test_metadata_from_bytes(self):
+        """Test metadata deserializes from JSON bytes."""
+        data = b'{"version":2,"original_filename":"hello.txt"}'
+        meta = FileMetadata.from_bytes(data)
+        assert meta.original_filename == "hello.txt"
+        assert meta.version == 2
+
+    def test_metadata_roundtrip(self):
+        """Test metadata serialization roundtrip."""
+        original = FileMetadata(original_filename="document.pdf", version=2)
+        serialized = original.to_bytes()
+        restored = FileMetadata.from_bytes(serialized)
+        assert restored.original_filename == original.original_filename
+        assert restored.version == original.version
+
+    def test_metadata_without_filename(self):
+        """Test metadata without original filename."""
+        meta = FileMetadata(original_filename=None, version=2)
+        data = meta.to_bytes()
+        restored = FileMetadata.from_bytes(data)
+        assert restored.original_filename is None
+        assert restored.version == 2
+
+    def test_metadata_invalid_json(self):
+        """Test handling of invalid JSON metadata."""
+        with pytest.raises(CryptoError, match="Invalid metadata"):
+            FileMetadata.from_bytes(b"not valid json{{{")
+
+    def test_metadata_filename_truncation(self):
+        """Test that very long filenames are truncated."""
+        long_name = "a" * 500  # Longer than FILENAME_MAX_LENGTH (255)
+        meta = FileMetadata(original_filename=long_name, version=2)
+        serialized = meta.to_bytes()
+        restored = FileMetadata.from_bytes(serialized)
+        assert len(restored.original_filename) == 255
+
+
+class TestEncryptFileV2:
+    """Test v2 file encryption with metadata."""
+
+    @pytest.fixture
+    def temp_files(self, monkeypatch):
+        """Create temporary files for testing and clean up after."""
+        # Auto-approve overwrite prompts during tests
+        monkeypatch.setattr("builtins.input", lambda _: "y")
+
+        files = []
+        for _ in range(3):
+            fd, path = tempfile.mkstemp()
+            os.close(fd)
+            files.append(path)
+        yield files
+        for path in files:
+            with contextlib.suppress(OSError):
+                os.unlink(path)
+
+    def test_encrypt_v2_with_filename(self, temp_files):
+        """Test v2 encryption stores original filename."""
+        input_path, output_path, dec_path = temp_files
+        test_data = b"Hello, v2 encryption!"
+
+        with open(input_path, "wb") as f:
+            f.write(test_data)
+
+        # Encrypt with metadata
+        encrypt_file_v2(
+            input_path, output_path, TEST_PASSWORDS["VALID"], store_filename=True
+        )
+
+        # Verify magic header is present
+        with open(output_path, "rb") as f:
+            magic = f.read(len(METADATA_MAGIC))
+            assert magic == METADATA_MAGIC
+
+        # Decrypt and verify
+        actual_path, metadata = decrypt_file_v2(
+            output_path, dec_path, TEST_PASSWORDS["VALID"]
+        )
+
+        assert actual_path == dec_path
+        assert metadata is not None
+        assert metadata.original_filename == os.path.basename(input_path)
+
+        with open(dec_path, "rb") as f:
+            assert f.read() == test_data
+
+    def test_encrypt_v2_without_filename(self, temp_files):
+        """Test v2 encryption without storing filename."""
+        input_path, output_path, dec_path = temp_files
+        test_data = b"No filename stored"
+
+        with open(input_path, "wb") as f:
+            f.write(test_data)
+
+        # Encrypt without filename
+        encrypt_file_v2(
+            input_path, output_path, TEST_PASSWORDS["VALID"], store_filename=False
+        )
+
+        # Decrypt and verify
+        actual_path, metadata = decrypt_file_v2(
+            output_path, dec_path, TEST_PASSWORDS["VALID"]
+        )
+
+        assert actual_path == dec_path
+        assert metadata is not None
+        assert metadata.original_filename is None
+
+    def test_decrypt_v2_restore_filename(self, temp_files, tmp_path):
+        """Test v2 decryption restores original filename."""
+        input_path, output_path, _ = temp_files
+        test_data = b"Restore my name!"
+
+        # Create file with a specific name
+        named_file = tmp_path / "my_document.txt"
+        named_file.write_bytes(test_data)
+
+        # Encrypt
+        enc_path = str(named_file) + ".enc"
+        encrypt_file_v2(
+            str(named_file), enc_path, TEST_PASSWORDS["VALID"], store_filename=True
+        )
+
+        # Delete original and decrypt (filename should be restored)
+        named_file.unlink()
+
+        actual_path, metadata = decrypt_file_v2(
+            enc_path, None, TEST_PASSWORDS["VALID"], restore_filename=True
+        )
+
+        assert os.path.basename(actual_path) == "my_document.txt"
+        assert metadata.original_filename == "my_document.txt"
+
+        with open(actual_path, "rb") as f:
+            assert f.read() == test_data
+
+        # Cleanup
+        os.unlink(actual_path)
+        os.unlink(enc_path)
+
+    def test_decrypt_v2_without_restore(self, temp_files, tmp_path):
+        """Test v2 decryption without restoring filename."""
+        test_data = b"Keep encrypted name!"
+
+        named_file = tmp_path / "original.txt"
+        named_file.write_bytes(test_data)
+
+        enc_path = str(named_file) + ".enc"
+        encrypt_file_v2(
+            str(named_file), enc_path, TEST_PASSWORDS["VALID"], store_filename=True
+        )
+
+        # Decrypt without restoring filename
+        actual_path, metadata = decrypt_file_v2(
+            enc_path, None, TEST_PASSWORDS["VALID"], restore_filename=False
+        )
+
+        assert actual_path == enc_path + ".dec"
+        assert (
+            metadata.original_filename == "original.txt"
+        )  # Still accessible but not used
+
+        # Cleanup
+        os.unlink(actual_path)
+        os.unlink(enc_path)
+
+
+class TestV2BackwardCompatibility:
+    """Test v2 decryption handles v1 (legacy) files."""
+
+    @pytest.fixture
+    def temp_files(self, monkeypatch):
+        """Create temporary files for testing and clean up after."""
+        # Auto-approve overwrite prompts during tests
+        monkeypatch.setattr("builtins.input", lambda _: "y")
+
+        files = []
+        for _ in range(3):
+            fd, path = tempfile.mkstemp()
+            os.close(fd)
+            files.append(path)
+        yield files
+        for path in files:
+            with contextlib.suppress(OSError):
+                os.unlink(path)
+
+    def test_decrypt_v1_file_with_v2_function(self, temp_files):
+        """Test v2 decryption function works with v1 encrypted files."""
+        input_path, enc_path, dec_path = temp_files
+        test_data = b"Legacy v1 format data"
+
+        with open(input_path, "wb") as f:
+            f.write(test_data)
+
+        # Encrypt with v1 (old) function
+        with (
+            StreamProcessor(input_path, "rb") as r,
+            StreamProcessor(enc_path, "wb") as w,
+        ):
+            encrypt_stream(r, w, TEST_PASSWORDS["VALID"])
+
+        # Decrypt with v2 function
+        actual_path, metadata = decrypt_file_v2(
+            enc_path, dec_path, TEST_PASSWORDS["VALID"]
+        )
+
+        assert actual_path == dec_path
+        assert metadata is None  # v1 files have no metadata
+
+        with open(dec_path, "rb") as f:
+            assert f.read() == test_data
+
+    def test_v1_file_detection(self, temp_files):
+        """Test that v1 files (without magic header) are correctly detected."""
+        input_path, enc_path, _ = temp_files
+        test_data = b"v1 file content"
+
+        with open(input_path, "wb") as f:
+            f.write(test_data)
+
+        # Create v1 encrypted file
+        with (
+            StreamProcessor(input_path, "rb") as r,
+            StreamProcessor(enc_path, "wb") as w,
+        ):
+            encrypt_stream(r, w, TEST_PASSWORDS["VALID"])
+
+        # Verify file doesn't start with v2 magic
+        with open(enc_path, "rb") as f:
+            header = f.read(len(METADATA_MAGIC))
+            assert header != METADATA_MAGIC
+
+
+class TestV2ErrorHandling:
+    """Test error handling in v2 encryption/decryption."""
+
+    @pytest.fixture
+    def temp_file(self, monkeypatch):
+        """Create a temporary file for testing."""
+        # Auto-approve overwrite prompts during tests
+        monkeypatch.setattr("builtins.input", lambda _: "y")
+
+        fd, path = tempfile.mkstemp()
+        os.close(fd)
+        yield path
+        with contextlib.suppress(OSError):
+            os.unlink(path)
+
+    def test_wrong_password_v2(self, temp_file):
+        """Test v2 decryption with wrong password."""
+        test_data = b"Secret data"
+
+        with open(temp_file, "wb") as f:
+            f.write(test_data)
+
+        enc_path = temp_file + ".enc"
+        dec_path = temp_file + ".dec"
+
+        encrypt_file_v2(temp_file, enc_path, TEST_PASSWORDS["VALID"])
+
+        with pytest.raises(CryptoError):
+            decrypt_file_v2(enc_path, dec_path, TEST_PASSWORDS["NO_SYMBOLS"])
+
+        # Cleanup
+        with contextlib.suppress(OSError):
+            os.unlink(enc_path)
+            os.unlink(dec_path)
+
+    def test_corrupted_metadata(self, temp_file):
+        """Test handling of corrupted metadata in v2 file."""
+        # Create a file with valid magic but invalid metadata
+        with open(temp_file, "wb") as f:
+            f.write(METADATA_MAGIC)
+            f.write(b"\x00\x10")  # 16 bytes of metadata expected
+            f.write(b"invalid json!!")  # But only 14 bytes of garbage
+
+        with pytest.raises(CryptoError, match="truncated metadata"):
+            decrypt_file_v2(temp_file, temp_file + ".dec", TEST_PASSWORDS["VALID"])
+
+    def test_truncated_v2_file(self, temp_file):
+        """Test handling of truncated v2 file."""
+        # Create a truncated file with just magic header
+        with open(temp_file, "wb") as f:
+            f.write(METADATA_MAGIC)
+
+        with pytest.raises(CryptoError, match="truncated"):
+            decrypt_file_v2(temp_file, temp_file + ".dec", TEST_PASSWORDS["VALID"])

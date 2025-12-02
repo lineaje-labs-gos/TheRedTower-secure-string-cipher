@@ -8,9 +8,15 @@ getpass.getpass so tests that patch stdin/stdout can drive the flows.
 import sys
 from typing import TextIO
 
-from .core import decrypt_file, decrypt_text, encrypt_file, encrypt_text
+from .core import (
+    decrypt_file_v2,
+    decrypt_text,
+    encrypt_file_v2,
+    encrypt_text,
+)
 from .passphrase_generator import generate_passphrase
 from .passphrase_manager import PassphraseVault
+from .security import sanitize_filename
 from .timing_safe import check_password_strength
 from .utils import colorize
 
@@ -746,15 +752,28 @@ def main(
                             out_stream.flush()
                         case 3:
                             out_path = payload + ".enc"
-                            encrypt_file(payload, out_path, password)
+                            encrypt_file_v2(
+                                payload, out_path, password, store_filename=True
+                            )
                             out_stream.write(f"Encrypted file -> {out_path}\n")
+                            out_stream.write(
+                                "(Original filename stored in encrypted file)\n"
+                            )
                             out_stream.flush()
                         case 4:
-                            # TODO: When we implement original filename storage in encrypted files,
-                            # use sanitize_filename() and validate_filename_safety() to secure the output name
-                            out_path = payload + ".dec"
-                            decrypt_file(payload, out_path, password)
-                            out_stream.write(f"Decrypted file -> {out_path}\n")
+                            # Use v2 decryption with automatic filename restoration
+                            actual_path, metadata = decrypt_file_v2(
+                                payload, None, password, restore_filename=True
+                            )
+                            out_stream.write(f"Decrypted file -> {actual_path}\n")
+                            if metadata and metadata.original_filename:
+                                sanitized = sanitize_filename(
+                                    metadata.original_filename
+                                )
+                                if sanitized != metadata.original_filename:
+                                    out_stream.write(
+                                        f"(Filename sanitized: '{metadata.original_filename}' -> '{sanitized}')\n"
+                                    )
                             out_stream.flush()
 
         except Exception as e:
