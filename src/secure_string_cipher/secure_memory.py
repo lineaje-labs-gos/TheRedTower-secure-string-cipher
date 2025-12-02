@@ -211,8 +211,8 @@ def secure_compare(a: bytes, b: bytes) -> bool:
 
     if HAS_SODIUM and _sodium_bindings is not None:
         try:
-            # sodium_memcmp returns 0 if equal
-            return _sodium_bindings.sodium_memcmp(a, b, len(a)) == 0
+            # sodium_memcmp returns True if equal (PyNaCl API)
+            return _sodium_bindings.sodium_memcmp(a, b)
         except (TypeError, ValueError):
             pass
 
