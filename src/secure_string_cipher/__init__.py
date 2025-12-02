@@ -2,6 +2,15 @@
 secure_string_cipher - Core encryption functionality
 """
 
+from .audit_log import (
+    AuditEvent,
+    AuditLevel,
+    AuditLogger,
+    audit_auth_failure,
+    audit_event,
+    audit_rate_limit,
+    get_audit_logger,
+)
 from .cli import main
 from .core import (
     CryptoError,
@@ -17,6 +26,7 @@ from .core import (
 )
 from .passphrase_generator import generate_passphrase
 from .passphrase_manager import PassphraseVault
+from .rate_limiter import RateLimiter, RateLimitError, get_global_limiter, rate_limited
 from .secure_memory import SecureBytes, SecureString, has_secure_memory, secure_wipe
 from .security import SecurityError
 from .timing_safe import (
@@ -57,6 +67,19 @@ __all__ = [
     # Passphrase management
     "generate_passphrase",
     "PassphraseVault",
+    # Rate limiting
+    "RateLimiter",
+    "RateLimitError",
+    "rate_limited",
+    "get_global_limiter",
+    # Audit logging
+    "AuditLogger",
+    "AuditEvent",
+    "AuditLevel",
+    "get_audit_logger",
+    "audit_event",
+    "audit_auth_failure",
+    "audit_rate_limit",
     # CLI utilities
     "colorize",
     "handle_timeout",

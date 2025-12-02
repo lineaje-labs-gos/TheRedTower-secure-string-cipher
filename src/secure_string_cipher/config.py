@@ -63,3 +63,36 @@ COLORS = {
 DEFAULT_MODE = 1
 CLIPBOARD_ENABLED = True
 CLI_TIMEOUT = 300
+
+# =============================================================================
+# Rate Limiting Settings
+# =============================================================================
+
+# Maximum attempts before lockout
+RATE_LIMIT_MAX_ATTEMPTS = 5
+
+# Time window for counting attempts (seconds)
+RATE_LIMIT_WINDOW_SECONDS = 60.0
+
+# Base lockout duration after exceeding max attempts (seconds)
+RATE_LIMIT_LOCKOUT_SECONDS = 30.0
+
+# Multiplier for exponential backoff on repeated lockouts
+# e.g., 2.0 means: 30s -> 60s -> 120s -> 240s...
+RATE_LIMIT_BACKOFF_MULTIPLIER = 2.0
+
+# =============================================================================
+# Audit Logging Settings
+# =============================================================================
+
+# Enable/disable audit logging (can be overridden by environment variable)
+AUDIT_LOG_ENABLED = True
+
+# Path to audit log file (None = default ~/.secure-cipher/logs/audit.log)
+AUDIT_LOG_PATH = None
+
+# Maximum audit log file size before rotation (bytes)
+AUDIT_LOG_MAX_SIZE = 10 * 1024 * 1024  # 10 MB
+
+# Number of backup log files to keep
+AUDIT_LOG_BACKUP_COUNT = 5

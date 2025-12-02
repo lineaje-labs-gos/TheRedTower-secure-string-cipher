@@ -1,5 +1,139 @@
 # Changelog
 
+## [1.0.25] - 2025-01-02
+
+### Property-Based Testing with Hypothesis
+
+This release adds property-based testing using Hypothesis to discover edge cases that traditional unit tests miss. Part of the v1.1.0 security hardening roadmap.
+
+#### New Test Module (`tests/unit/test_property_based.py`)
+
+24 property-based tests covering cryptographic invariants:
+
+- **Key Derivation Properties** (4 tests):
+  - Deterministic: Same passphrase + salt always produces same key
+  - Different passphrases produce different keys
+  - Different salts produce different keys (salt uniqueness critical)
+  - Key length always matches `ARGON2_HASH_LENGTH` (32 bytes)
+
+- **Encryption Properties** (4 tests):
+  - Roundtrip: `decrypt(encrypt(plaintext)) == plaintext` for all inputs
+  - Randomized: Same plaintext encrypted twice produces different ciphertext (IV uniqueness)
+  - Ciphertext differs from plaintext (encryption actually transforms data)
+  - Wrong passphrase fails decryption (authentication working)
+
+- **Key Commitment Properties** (4 tests):
+  - Deterministic: Same key always produces same commitment
+  - Unique: Different keys produce different commitments
+  - Fixed length: Always 32 bytes regardless of input
+  - Verification: `verify_key_commitment(key, compute_key_commitment(key))` always True
+
+- **Filename Sanitization Properties** (3 tests):
+  - No path separators: Output never contains `/`, `\`, or `..`
+  - Length bounds: Output respects maximum filename length
+  - Idempotent: `sanitize(sanitize(x)) == sanitize(x)`
+
+- **Constant-Time Compare Properties** (3 tests):
+  - Reflexive: `constant_time_compare(x, x)` always True
+  - Symmetric: `constant_time_compare(a, b) == constant_time_compare(b, a)`
+  - Different inputs return False
+
+- **Secure Memory Properties** (3 tests):
+  - Data preservation: `SecureString.get()` returns original data
+  - Bytes conversion: `SecureBytes.data` matches input
+  - Clear zeros memory: After `clear()`, data is zeroed
+
+- **FileMetadata Properties** (1 test):
+  - JSON roundtrip: `from_json(to_json(meta)) == meta` for valid metadata
+
+- **Password Strength Properties** (2 tests):
+  - Valid passwords (12+ chars, mixed case, digits, special) pass validation
+  - Short passwords (<12 chars) always fail
+
+#### Testing Strategy
+
+- **Hypothesis settings**: `deadline=None` for Argon2id tests (memory-hard KDF is intentionally slow)
+- **Strategies used**: `st.text()`, `st.binary()`, `st.integers()`, `st.sampled_from()`
+- **Property focus**: Cryptographic invariants that must hold for all inputs
+
+#### Test Suite
+
+- **Test count**: 402 → 426 tests (+24 property-based)
+- **Coverage**: Maintained above 69% threshold
+- **CI integration**: Property tests run in parallel with existing suite
+
+## [1.0.24] - 2025-01-02
+
+### Rate Limiting & Security Audit Logging
+
+This release adds brute-force protection and comprehensive audit logging for security-sensitive operations, completing a key milestone in the v1.1.0 security hardening roadmap.
+
+#### Rate Limiting (`rate_limiter.py`)
+
+Prevents brute-force attacks on password-protected operations:
+
+- **Thread-safe rate limiter**: Tracks failed attempts per operation/identifier with configurable thresholds
+- **Exponential backoff**: Lockout duration doubles after each lockout (30s → 60s → 120s...)
+- **Automatic expiration**: Old attempts expire after configurable window (default 60s)
+- **Decorator support**: `@rate_limited` decorator for easy integration
+- **Global limiter**: Singleton `get_global_limiter()` for application-wide rate limiting
+
+```python
+from secure_string_cipher import RateLimiter, rate_limited, RateLimitError
+
+limiter = RateLimiter(max_attempts=5, window_seconds=60)
+if limiter.check_rate_limit("vault_unlock", "user@example.com"):
+    # Attempt allowed
+    limiter.record_success("vault_unlock", "user@example.com")
+else:
+    raise RateLimitError("Too many attempts", wait_seconds=30)
+```
+
+#### Audit Logging (`audit_log.py`)
+
+Tamper-evident logging of cryptographic operations for security auditing:
+
+- **JSON-formatted logs**: Machine-parseable entries with timestamps, PIDs, and event details
+- **Automatic log rotation**: Configurable max size (default 10MB) with backup count
+- **Sensitive data redaction**: Passwords, passphrases, keys, and plaintext automatically redacted
+- **Configurable verbosity**: OFF, CRITICAL, STANDARD, VERBOSE levels
+- **Thread-safe singleton**: Single logger instance across application
+- **Convenience functions**: `audit_event()`, `audit_auth_failure()`, `audit_rate_limit()`
+
+```python
+from secure_string_cipher import get_audit_logger, AuditEvent, AuditLevel
+
+logger = get_audit_logger()
+logger.log(AuditEvent.ENCRYPTION, success=True, details={"file": "secret.txt"})
+logger.log(AuditEvent.AUTH_FAILURE, success=False, details={"reason": "wrong password"})
+```
+
+#### Configuration Constants
+
+New settings in `config.py`:
+- `RATE_LIMIT_MAX_ATTEMPTS = 5` - Maximum failed attempts before lockout
+- `RATE_LIMIT_WINDOW_SECONDS = 60` - Time window for tracking attempts
+- `RATE_LIMIT_LOCKOUT_SECONDS = 30` - Initial lockout duration
+- `RATE_LIMIT_BACKOFF_MULTIPLIER = 2.0` - Exponential backoff factor
+- `AUDIT_LOG_ENABLED = True` - Enable/disable audit logging
+- `AUDIT_LOG_PATH` - Default log location (`~/.secure-cipher/audit.log`)
+- `AUDIT_LOG_MAX_SIZE = 10MB` - Log rotation threshold
+- `AUDIT_LOG_BACKUP_COUNT = 5` - Number of backup logs to keep
+
+#### Technical Details
+
+- **Timezone handling**: Standardized on `timezone.utc` (ruff UP017 ignored to prevent auto-conversion)
+- **Python version**: Updated mypy and documentation to reflect 3.12+ target
+- **Thread safety**: Both rate limiter and audit logger use threading locks
+
+#### Tests
+
+- 402 tests total (354 → 402, +48 new tests)
+- `test_rate_limiter.py`: 24 tests covering basic ops, backoff, threading, decorators
+- `test_audit_log.py`: 24 tests covering logging, redaction, rotation, threading
+
+---
+
 ## [1.0.23] - 2025-12-02
 
 ### Security Hardening & UX Improvements
