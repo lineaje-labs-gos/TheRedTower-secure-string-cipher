@@ -1,10 +1,11 @@
-"""
-Command-line interface for secure-string-cipher (minimal implementation used by tests).
+"""Command-line interface for secure-string-cipher.
 
-This module provides a simple, test-friendly CLI harness. It avoids using
-getpass.getpass so tests that patch stdin/stdout can drive the flows.
+This module provides an interactive CLI with automatic secure password input.
+When running in an interactive terminal, passwords are hidden using getpass.
+When stdin is piped or redirected (tests, scripts), visible input is used.
 """
 
+import getpass as getpass_module
 import sys
 from typing import TextIO
 
@@ -22,6 +23,34 @@ from .utils import colorize
 
 # Security: Maximum password retry attempts before exiting
 MAX_PASSWORD_RETRIES = 5
+
+
+def _read_password(
+    prompt: str, in_stream: TextIO, out_stream: TextIO, *, echo: bool = False
+) -> str:
+    """Read a password with hidden input for interactive terminals.
+
+    When stdin is an interactive terminal (TTY), uses getpass to hide input.
+    When stdin is piped or redirected (tests, scripts), uses visible readline.
+
+    Args:
+        prompt: The prompt to display to the user
+        in_stream: Input stream (usually sys.stdin)
+        out_stream: Output stream (usually sys.stdout)
+        echo: If True, always use visible input (for non-sensitive data)
+
+    Returns:
+        The entered password/text with trailing newline stripped
+    """
+    if echo or in_stream is not sys.stdin or not sys.stdin.isatty():
+        # Non-interactive mode: use visible readline
+        out_stream.write(prompt)
+        out_stream.flush()
+        line = in_stream.readline()
+        return line.rstrip("\n") if line else ""
+    else:
+        # Interactive terminal: use getpass for hidden input
+        return getpass_module.getpass(prompt)
 
 
 def _print_banner(out_stream: TextIO) -> None:
@@ -192,9 +221,9 @@ def _offer_vault_storage(
         out_stream.flush()
         return
 
-    out_stream.write("Enter master password to encrypt vault: ")
-    out_stream.flush()
-    master_pw = in_stream.readline().rstrip("\n")
+    master_pw = _read_password(
+        "Enter master password to encrypt vault: ", in_stream, out_stream
+    )
 
     if not master_pw:
         out_stream.write(
@@ -297,16 +326,12 @@ def _get_password(
                 "💡 Tip: Type '/gen' to auto-generate a secure passphrase\n", "cyan"
             )
         )
-        out_stream.write("Enter passphrase: ")
-        out_stream.flush()
 
-        pw = in_stream.readline()
+        pw = _read_password("Enter passphrase: ", in_stream, out_stream)
         if pw == "":
             out_stream.write("❌ Password entry cancelled\n")
             out_stream.flush()
             sys.exit(1)
-
-        pw = pw.rstrip("\n")
 
         # Check for special commands to generate passphrase
         if pw.lower() in ("/gen", "/generate", "/g"):
@@ -345,9 +370,7 @@ def _get_password(
 
         # If confirmation required, validate match
         if confirm:
-            out_stream.write("Confirm passphrase: ")
-            out_stream.flush()
-            confirm_pw = in_stream.readline()
+            confirm_pw = _read_password("Confirm passphrase: ", in_stream, out_stream)
 
             if confirm_pw == "":
                 remaining = max_retries - attempts
@@ -368,8 +391,6 @@ def _get_password(
                     )
                     out_stream.flush()
                     sys.exit(1)
-
-            confirm_pw = confirm_pw.rstrip("\n")
 
             if confirm_pw != pw:
                 remaining = max_retries - attempts
@@ -472,18 +493,18 @@ def _handle_store_passphrase(in_stream: TextIO, out_stream: TextIO) -> None:
         out_stream.flush()
         return
 
-    out_stream.write("Enter the passphrase to store: ")
-    out_stream.flush()
-    passphrase = in_stream.readline().rstrip("\n")
+    passphrase = _read_password(
+        "Enter the passphrase to store: ", in_stream, out_stream
+    )
 
     if not passphrase:
         out_stream.write("Error: Passphrase cannot be empty\n")
         out_stream.flush()
         return
 
-    out_stream.write("\nEnter master password to encrypt vault: ")
-    out_stream.flush()
-    master_pw = in_stream.readline().rstrip("\n")
+    master_pw = _read_password(
+        "\nEnter master password to encrypt vault: ", in_stream, out_stream
+    )
 
     if not master_pw:
         out_stream.write("Error: Master password cannot be empty\n")
@@ -514,9 +535,7 @@ def _handle_retrieve_passphrase(in_stream: TextIO, out_stream: TextIO) -> None:
         return
 
     out_stream.write(colorize("\n🔓 Retrieve Passphrase from Vault", "cyan") + "\n")
-    out_stream.write("\nEnter master password: ")
-    out_stream.flush()
-    master_pw = in_stream.readline().rstrip("\n")
+    master_pw = _read_password("\nEnter master password: ", in_stream, out_stream)
 
     if not master_pw:
         out_stream.write("Error: Master password cannot be empty\n")
@@ -565,9 +584,7 @@ def _handle_list_vault(in_stream: TextIO, out_stream: TextIO) -> None:
         return
 
     out_stream.write(colorize("\n📋 List Stored Passphrases", "cyan") + "\n")
-    out_stream.write("\nEnter master password: ")
-    out_stream.flush()
-    master_pw = in_stream.readline().rstrip("\n")
+    master_pw = _read_password("\nEnter master password: ", in_stream, out_stream)
 
     if not master_pw:
         out_stream.write("Error: Master password cannot be empty\n")
@@ -617,9 +634,7 @@ def _handle_manage_vault(in_stream: TextIO, out_stream: TextIO) -> None:
         out_stream.flush()
         return
 
-    out_stream.write("\nEnter master password: ")
-    out_stream.flush()
-    master_pw = in_stream.readline().rstrip("\n")
+    master_pw = _read_password("\nEnter master password: ", in_stream, out_stream)
 
     if not master_pw:
         out_stream.write("Error: Master password cannot be empty\n")
@@ -647,9 +662,9 @@ def _handle_manage_vault(in_stream: TextIO, out_stream: TextIO) -> None:
             return
 
         if choice == "1":
-            out_stream.write(f"\nEnter new passphrase for '{label}': ")
-            out_stream.flush()
-            new_passphrase = in_stream.readline().rstrip("\n")
+            new_passphrase = _read_password(
+                f"\nEnter new passphrase for '{label}': ", in_stream, out_stream
+            )
 
             if not new_passphrase:
                 out_stream.write("Error: Passphrase cannot be empty\n")

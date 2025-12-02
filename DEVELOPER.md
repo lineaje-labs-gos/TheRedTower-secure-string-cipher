@@ -104,6 +104,24 @@ pytest -m security
 pytest -m "unit and not slow"
 ```
 
+### Testing Password Input
+
+The CLI uses automatic mode detection for password input:
+- **Interactive terminal** (`sys.stdin.isatty()` = True): Hidden input via `getpass`
+- **Piped/redirected stdin** (tests, scripts): Visible input via `readline`
+
+Tests use `StringIO` which triggers visible mode, so they work without modification:
+
+```python
+from io import StringIO
+from secure_string_cipher.cli import run_menu
+
+# Passwords flow through StringIO - no getpass called
+in_stream = StringIO("1\nmy message\nMySecurePass123!\nMySecurePass123!\n0\n")
+out_stream = StringIO()
+run_menu(in_stream, out_stream)
+```
+
 ### Debug CI Failures
 ```bash
 # Run what CI runs

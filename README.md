@@ -11,6 +11,7 @@ A security-focused AES-256-GCM encryption CLI tool with passphrase vault and mod
 - **AES-256-GCM encryption** for text and files with authenticated encryption
 - **Argon2id key derivation** – memory-hard, GPU/ASIC resistant
 - **Key commitment scheme** – prevents partitioning oracle attacks
+- **Hidden password input** – passwords hidden in interactive terminals, visible for scripts/tests
 - **Inline passphrase generation** – type `/gen` at any password prompt
 - **Encrypted passphrase vault** with HMAC-SHA256 integrity verification
 - **Secure memory handling** via libsodium (PyNaCl) when available
@@ -156,6 +157,8 @@ docker run --rm -it \
 | **Timing Safety** | Constant-time | All password/hash comparisons |
 
 **Additional protections:** Path traversal prevention, symlink attack detection, atomic writes, user-only file permissions (600), 12-character minimum password with complexity requirements.
+
+**Password input:** When running interactively, passwords are hidden (using `getpass`). When stdin is piped or redirected (scripts, automation, tests), passwords are visible. This allows both secure interactive use and scriptable automation.
 
 **Python memory limitations:** Even with libsodium, Python strings are immutable and GC may copy objects. Use `has_secure_memory()` to check libsodium availability.
 

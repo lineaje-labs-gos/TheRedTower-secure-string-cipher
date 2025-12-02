@@ -4,18 +4,34 @@ Passphrase management module for secure storage and retrieval.
 This module encrypts generated passphrases with a master password and stores them
 in an encrypted vault file. Users can retrieve their passphrases by providing
 the master password.
+
+Vault Format:
+    SSCVAULT
+    <hmac_salt_hex>
+    ---DATA---
+    <encrypted_vault_data>
+    ---HMAC---
+    <hmac_hex>
+
+The HMAC key is derived using Argon2id with a random salt, providing
+memory-hard protection against brute-force attacks on integrity verification.
 """
 
 import hashlib
 import hmac
 import json
 import os
+import secrets
 import shutil
 from datetime import datetime
 from pathlib import Path
 
-from .core import decrypt_text, encrypt_text
+from .core import decrypt_text, derive_key, encrypt_text
 from .security import secure_atomic_write
+
+# Vault format constants
+_VAULT_HEADER = "SSCVAULT"
+_HMAC_SALT_SIZE = 32  # 256 bits
 
 
 class PassphraseVault:
@@ -44,17 +60,21 @@ class PassphraseVault:
                 self.backup_dir = self.vault_path.parent / "backups"
             self.backup_dir.mkdir(exist_ok=True, mode=0o700)
 
-    def _compute_hmac(self, data: str, master_password: str) -> str:
-        """Compute HMAC for integrity verification.
+    def _compute_hmac(self, data: str, master_password: str, salt: bytes) -> str:
+        """Compute HMAC for integrity verification using Argon2id-derived key.
+
+        Uses Argon2id with a random salt to derive the HMAC key, providing
+        memory-hard protection against brute-force attacks on integrity verification.
 
         Args:
             data: Data to compute HMAC for
-            master_password: Key for HMAC
+            master_password: Password for key derivation
+            salt: Random salt for Argon2id key derivation
 
         Returns:
             Hex-encoded HMAC
         """
-        key = hashlib.sha256(master_password.encode()).digest()
+        key = derive_key(master_password, salt)
         return hmac.new(key, data.encode(), hashlib.sha256).hexdigest()
 
     def _create_backup(self) -> None:
@@ -98,45 +118,67 @@ class PassphraseVault:
             if not vault_contents:
                 return {}
 
-            if "\n---HMAC---\n" in vault_contents:
-                encrypted_vault, stored_hmac = vault_contents.split("\n---HMAC---\n")
+            # Parse vault format: SSCVAULT / hmac_salt_hex / ---DATA--- / encrypted / ---HMAC--- / hmac
+            lines = vault_contents.split("\n")
 
-                # Verify HMAC integrity
-                computed_hmac = self._compute_hmac(encrypted_vault, master_password)
-                if not hmac.compare_digest(computed_hmac, stored_hmac):
-                    # HMAC mismatch could be wrong password OR tampering
-                    # Try to decrypt to differentiate
-                    try:
-                        decrypt_text(encrypted_vault, master_password)
-                        # If decryption succeeds, file was tampered (HMAC wrong but decrypt works)
-                        raise ValueError(
-                            "Vault integrity check failed! File may have been tampered with. "
-                            "Check backups in ~/.secure-cipher/backups/"
-                        )
-                    except Exception:
-                        # If decryption also fails, it's likely wrong password
-                        raise ValueError(
-                            "Wrong master password or corrupted vault file"
-                        ) from None
-            else:
-                # Legacy vault without HMAC (from older version)
-                encrypted_vault = vault_contents
+            if not vault_contents.startswith(_VAULT_HEADER + "\n"):
+                raise ValueError(
+                    "Unrecognized vault format. This vault may be from an older version."
+                )
+
+            if len(lines) < 6 or lines[2] != "---DATA---":
+                raise ValueError("Corrupted vault file format")
+
+            hmac_salt_hex = lines[1]
+            try:
+                hmac_salt = bytes.fromhex(hmac_salt_hex)
+            except ValueError:
+                raise ValueError("Corrupted vault file: invalid HMAC salt") from None
+
+            # Find data and HMAC sections
+            data_start = 3
+            hmac_separator_idx = None
+            for i, line in enumerate(lines[data_start:], start=data_start):
+                if line == "---HMAC---":
+                    hmac_separator_idx = i
+                    break
+
+            if hmac_separator_idx is None:
+                raise ValueError("Corrupted vault file: missing HMAC")
+
+            encrypted_vault = "\n".join(lines[data_start:hmac_separator_idx])
+            stored_hmac = "\n".join(lines[hmac_separator_idx + 1 :])
+
+            # Verify HMAC with Argon2id-derived key
+            computed_hmac = self._compute_hmac(
+                encrypted_vault, master_password, hmac_salt
+            )
+            if not hmac.compare_digest(computed_hmac, stored_hmac):
+                try:
+                    decrypt_text(encrypted_vault, master_password)
+                    raise ValueError(
+                        "Vault integrity check failed! File may have been tampered with. "
+                        "Check backups in ~/.secure-cipher/backups/"
+                    )
+                except Exception:
+                    raise ValueError(
+                        "Wrong master password or corrupted vault file"
+                    ) from None
 
             decrypted_json = decrypt_text(encrypted_vault, master_password)
             return json.loads(decrypted_json)
+
         except json.JSONDecodeError:
             raise ValueError("Vault file is corrupted. Check backups.") from None
         except ValueError:
-            # Re-raise our custom error messages
             raise
         except Exception:
-            # If decryption fails (wrong password or corrupted), return empty
             raise ValueError(
                 "Failed to decrypt vault. Wrong master password or corrupted vault file."
             ) from None
 
     def _save_vault(self, vault_data: dict[str, str], master_password: str) -> None:
-        """Encrypt and save the vault with integrity protection.
+        """Encrypt and save the vault with Argon2id HMAC.
 
         Args:
             vault_data: Dictionary mapping labels to passphrases
@@ -145,13 +187,21 @@ class PassphraseVault:
         self._create_backup()
 
         json_data = json.dumps(vault_data, indent=2)
-
         encrypted_vault = encrypt_text(json_data, master_password)
 
-        # Compute HMAC for integrity verification
-        vault_hmac = self._compute_hmac(encrypted_vault, master_password)
+        # Generate random salt for HMAC key derivation
+        hmac_salt = secrets.token_bytes(_HMAC_SALT_SIZE)
+        vault_hmac = self._compute_hmac(encrypted_vault, master_password, hmac_salt)
 
-        vault_contents = f"{encrypted_vault}\n---HMAC---\n{vault_hmac}"
+        # Build vault format
+        vault_contents = (
+            f"{_VAULT_HEADER}\n"
+            f"{hmac_salt.hex()}\n"
+            f"---DATA---\n"
+            f"{encrypted_vault}\n"
+            f"---HMAC---\n"
+            f"{vault_hmac}"
+        )
 
         # Use atomic write to prevent corruption during write
         secure_atomic_write(self.vault_path, vault_contents.encode("utf-8"), mode=0o600)

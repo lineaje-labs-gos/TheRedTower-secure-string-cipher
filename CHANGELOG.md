@@ -1,5 +1,48 @@
 # Changelog
 
+## [1.0.23] - 2025-12-02
+
+### Security Hardening & UX Improvements
+
+This release completes the security audit recommendations with enhanced key protection, improved password input handling, and upgraded vault integrity.
+
+#### Security Enhancements
+
+- **SecureBytes for Decryption Keys**: Decryption operations now wrap derived keys in `SecureBytes`, ensuring automatic memory zeroing when keys go out of scope. Prevents key material from lingering in memory after use.
+
+- **Argon2id for Vault HMAC**: The passphrase vault now uses Argon2id (instead of SHA-256) to derive HMAC keys for integrity verification. Each vault has a unique random 32-byte salt, providing memory-hard protection against brute-force attacks on vault integrity.
+
+- **New Vault Format**: Vault files now use the `SSCVAULT` header with random HMAC salt:
+  ```
+  SSCVAULT
+  <hmac_salt_hex>
+  ---DATA---
+  <encrypted_vault>
+  ---HMAC---
+  <argon2id_derived_hmac>
+  ```
+  **Breaking Change**: Vaults from previous versions are not compatible. Back up and re-create vaults after upgrading.
+
+#### User Experience
+
+- **Hidden Password Input**: Passwords are now hidden when typing in interactive terminals (via `getpass`). When stdin is piped or redirected (scripts, tests, automation), visible input is used automatically. No configuration needed.
+
+- **Documentation Updates**: README and DEVELOPER.md updated to explain password input behavior and testing patterns.
+
+#### Technical Details
+
+- `_read_password()` helper with `sys.stdin.isatty()` detection
+- `_compute_hmac()` now takes salt parameter for Argon2id derivation
+- Removed legacy v1 vault loading code (clean single-format implementation)
+- Memory limitation documentation in `secure_memory.py`
+
+#### Tests
+
+- 353 tests passing
+- All existing tests work unchanged (StringIO triggers visible input mode)
+
+---
+
 ## [1.0.22] - 2025-12-02
 
 ### Legacy Code Removal (Development Release)
