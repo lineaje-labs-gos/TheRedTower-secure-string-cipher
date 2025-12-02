@@ -6,11 +6,10 @@ We actively support the following versions with security updates:
 
 | Version | Supported          | Python Requirements |
 | ------- | ------------------ | ------------------- |
-| 1.0.16+ | :white_check_mark: | 3.12+              |
-| 1.0.15  | :x:                | 3.10-3.14          |
-| < 1.0.15| :x:                | 3.10+              |
+| 1.0.20+ | :white_check_mark: | 3.12+              |
+| < 1.0.20| :x:                | 3.10+              |
 
-**Note**: As of version 1.0.16, we require Python 3.12 or newer. This allows us to leverage modern Python features and maintain a cleaner codebase.
+**Note**: Version 1.0.20+ uses Argon2id KDF and key commitment. Files encrypted with older versions are not compatible.
 
 ## Python Version Support Policy
 
@@ -57,31 +56,58 @@ We take security bugs seriously. Thanks for helping us keep this project secure.
 
 ## Security Features
 
-This project implements several security measures:
+This project implements multiple layers of security:
 
-1. **Cryptography**
-   - AES-256-GCM for encryption (authenticated encryption mode)
-   - PBKDF2-HMAC-SHA256 for key derivation (390,000 iterations)
-   - Cryptographically secure random number generation
+### 1. Cryptography
 
-2. **Password Protection**
-   - Minimum 12 characters required
-   - Complexity requirements (mixed case, numbers, symbols)
-   - Common password pattern detection
-   - Constant-time password comparison to prevent timing attacks
+| Component | Implementation | Configuration |
+|-----------|---------------|---------------|
+| **Encryption** | AES-256-GCM | 256-bit key, 96-bit nonce, 128-bit tag |
+| **Key Derivation** | Argon2id | 64MB memory, 3 iterations, parallelism 4 |
+| **Key Commitment** | HMAC-SHA256 | Prevents partitioning oracle attacks |
+| **Random Generation** | `secrets` module | OS-level CSPRNG |
 
-3. **File Security**
-   - 100 MB file size limit
-   - Atomic file writes (no partial writes on failure)
-   - Overwrite confirmation prompts
-   - Secure file permissions (chmod 600 for vault files)
-   - HMAC-SHA256 integrity verification (detects tampering)
-   - Automatic backups before vault modifications (last 5 kept in `~/.secure-cipher/backups/`)
+**Argon2id parameters exceed OWASP 2024 recommendations** (minimum: 19MB memory, 2 iterations).
 
-4. **Runtime Protection**
-   - Input sanitization and validation
-   - Secure memory wiping for sensitive data
-   - Error messages don't leak sensitive information
+### 2. Password Protection
+
+- **Minimum length**: 12 characters
+- **Complexity requirements**: Mixed case, numbers, symbols
+- **Common password detection**: Blocks known weak passwords
+- **Constant-time comparison**: Prevents timing attacks
+- **Rate limiting**: Exponential backoff after failed attempts (5 attempts → 30s lockout)
+
+### 3. File Security
+
+- **100 MB file size limit** - Prevents DoS attacks
+- **Atomic file writes** - No partial writes on failure
+- **Secure permissions** - `chmod 600` (owner-only read/write)
+- **Path validation** - Blocks path traversal (`../`, symlinks)
+- **Filename sanitization** - Prevents Unicode attacks, null bytes
+
+### 4. Vault Integrity
+
+- **HMAC-SHA256 verification** - Detects tampering before decryption
+- **Automatic backups** - Last 5 backups in `~/.secure-cipher/backups/`
+- **Backup on modification** - Backup created before any vault change
+
+### 5. Runtime Protection
+
+- **Secure memory wiping** - `sodium_memzero()` via libsodium (PyNaCl)
+- **SecureString/SecureBytes classes** - Auto-zero on deletion
+- **Timing jitter** - Adds random delay to security operations
+- **Input sanitization** - All user input validated
+- **Audit logging** - Security events logged with timestamps
+
+### 6. Audit Logging
+
+Security-sensitive operations are logged to `~/.secure-cipher/audit.log`:
+
+- Authentication successes/failures
+- Rate limit triggers
+- Encryption/decryption operations
+- Vault access events
+- Sensitive data automatically redacted
 
 ## For Contributors
 
@@ -99,6 +125,7 @@ When contributing:
 
 3. **Testing**
    - Write tests for security-critical code
+   - Property-based tests with Hypothesis
    - Test edge cases and error conditions
    - Verify input validation
 
@@ -130,8 +157,9 @@ When contributing:
 
 1. **Passphrases**
    - Use strong, unique passphrases (12+ characters, mixed case, numbers, symbols)
+   - Use `/gen` at password prompts to generate secure passphrases
    - Don't reuse passphrases across different files
-   - Store passphrases in a password manager
+   - Store passphrases in a password manager or the built-in vault
    - Never share passphrases over insecure channels
 
 2. **File Handling**
@@ -151,8 +179,11 @@ When contributing:
 ### Dependencies
 
 1. **What we depend on**
-   - `cryptography` - Industry-standard cryptographic library
+   - `cryptography` - Industry-standard cryptographic library (AES-GCM)
+   - `argon2-cffi` - Argon2 implementation for key derivation
+   - `pynacl` - libsodium bindings for secure memory
    - `pyperclip` - Clipboard support
+   - `wcwidth` - Unicode width calculation
    - All from trusted, well-maintained sources
 
 2. **How we vet dependencies**
@@ -186,6 +217,14 @@ pipdeptree -p secure-string-cipher
 | Date       | Type       | Auditor  | Status    | Notes                   |
 |------------|------------|----------|-----------|-------------------------|
 | 2025-11-06 | Self-Audit | Internal | Completed | Initial security review |
+| 2025-12-02 | Self-Audit | Internal | Completed | Argon2id, key commitment, rate limiting |
+
+## Third-Party Audit
+
+This project maintains audit documentation for third-party security reviews:
+
+- **[CRYPTOGRAPHY.md](CRYPTOGRAPHY.md)** - Detailed cryptographic design and threat model
+- **[AUDIT_CHECKLIST.md](AUDIT_CHECKLIST.md)** - Checklist for security auditors
 
 ## Contact
 
@@ -195,5 +234,5 @@ pipdeptree -p secure-string-cipher
 
 ---
 
-**Last updated:** November 6, 2025
-**Version:** 1.0
+**Last updated:** December 2, 2025
+**Version:** 2.0

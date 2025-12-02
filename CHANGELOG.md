@@ -1,5 +1,63 @@
 # Changelog
 
+## [1.0.26] - 2025-12-02
+
+### Third-Party Security Audit Preparation
+
+This release prepares comprehensive documentation for third-party security audits, completing the v1.1.0 security hardening roadmap.
+
+#### Documentation Updates
+
+- **SECURITY.md** (updated):
+  - Updated cryptographic primitives: PBKDF2 → Argon2id
+  - Added key commitment, rate limiting, audit logging features
+  - Updated dependency list (argon2-cffi, pynacl)
+  - Added audit history entries
+  - Updated version support table
+
+- **CRYPTOGRAPHY.md** (new):
+  - Comprehensive threat model with in-scope/out-of-scope threats
+  - Detailed cryptographic primitive specifications:
+    - AES-256-GCM: key size, nonce size, tag size
+    - Argon2id: time cost, memory cost, parallelism
+    - HMAC-SHA256: key commitment, vault integrity
+  - Key derivation process with code references
+  - Encryption scheme diagrams (text and file)
+  - Key commitment security properties
+  - File format v4 specification with field layout
+  - Vault security architecture
+  - Side-channel protections:
+    - Timing attack mitigations (constant-time comparisons)
+    - Memory security (libsodium secure wiping)
+    - Timing jitter
+  - Security assumptions and trust boundaries
+  - Known limitations with mitigations
+  - References to standards (NIST SP 800-38D, RFC 9106, RFC 2104)
+
+- **AUDIT_CHECKLIST.md** (new):
+  - 10-section audit checklist for security reviewers
+  - Quick reference table linking components to source files
+  - Detailed checklist items:
+    1. Cryptographic implementation (key derivation, encryption, commitment)
+    2. Side-channel protections (timing, memory)
+    3. Input validation (path security, password policy)
+    4. Authentication & access control (rate limiting, vault)
+    5. Error handling (information leakage, exception safety)
+    6. Configuration security (constants, hardcoded secrets)
+    7. Dependencies (vulnerability scan, version review)
+    8. Testing coverage (property-based, negative, boundary)
+    9. File format (parsing, bounds checking)
+    10. Operational security (logging, runtime checks)
+  - Audit sign-off table
+  - Findings template
+
+#### Security Audit Readiness
+
+- **Self-audit status**: 2 internal audits completed (Nov 2025, Dec 2025)
+- **Documentation coverage**: All cryptographic decisions documented with rationale
+- **Code references**: Direct links to source files and functions
+- **Test coverage**: 426 tests including 24 property-based tests
+
 ## [1.0.25] - 2025-01-02
 
 ### Property-Based Testing with Hypothesis
