@@ -210,13 +210,10 @@ def secure_compare(a: bytes, b: bytes) -> bool:
         return False
 
     if HAS_SODIUM and _sodium_bindings is not None:
-        try:
-            # sodium_memcmp returns True if equal (PyNaCl API)
-            return _sodium_bindings.sodium_memcmp(a, b)
-        except (TypeError, ValueError):
-            pass
+        # Use libsodium's constant-time comparison (no fallback - fail loudly if broken)
+        return _sodium_bindings.sodium_memcmp(a, b)
 
-    # Fallback: constant-time comparison
+    # Fallback only when libsodium is not available
     import hmac
 
     return hmac.compare_digest(a, b)

@@ -405,3 +405,30 @@ class TestLibsodiumIntegration:
         secure.wipe()
         # Buffer should be zeroed regardless of backend
         assert all(b == 0 for b in buffer_ref)
+
+    @pytest.mark.skipif(
+        not __import__(
+            "secure_string_cipher.secure_memory", fromlist=["HAS_SODIUM"]
+        ).HAS_SODIUM,
+        reason="PyNaCl not installed",
+    )
+    def test_sodium_memcmp_is_used_when_available(self):
+        """Verify libsodium's memcmp is actually used, not silently falling back.
+
+        This test prevents regressions where code changes cause silent fallback
+        to hmac.compare_digest when sodium should be used.
+        """
+        from unittest.mock import patch
+
+        from secure_string_cipher.secure_memory import _sodium_bindings
+
+        a = b"test data"
+        b = b"test data"
+
+        # Patch sodium_memcmp to track if it's called
+        with patch.object(
+            _sodium_bindings, "sodium_memcmp", wraps=_sodium_bindings.sodium_memcmp
+        ) as mock_memcmp:
+            result = secure_compare(a, b)
+            assert result is True
+            mock_memcmp.assert_called_once_with(a, b)
