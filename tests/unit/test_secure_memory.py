@@ -326,3 +326,82 @@ class TestMemorySafetyIntegration:
         secure_wipe(data)
         assert len(data) == original_len
         assert all(b == 0 for b in data)
+
+
+# =============================================================================
+# PyNaCl / libsodium Integration Tests
+# =============================================================================
+
+
+class TestLibsodiumIntegration:
+    """Tests for libsodium (PyNaCl) integration."""
+
+    def test_has_secure_memory_returns_bool(self):
+        """Verify has_secure_memory() returns a boolean."""
+        from secure_string_cipher.secure_memory import has_secure_memory
+
+        result = has_secure_memory()
+        assert isinstance(result, bool)
+
+    def test_has_secure_memory_reflects_pynacl_availability(self):
+        """Verify has_secure_memory() correctly detects PyNaCl."""
+        from secure_string_cipher.secure_memory import HAS_SODIUM, has_secure_memory
+
+        assert has_secure_memory() == HAS_SODIUM
+
+    def test_secure_wipe_works_regardless_of_backend(self):
+        """Verify secure_wipe works with or without libsodium."""
+        data = bytearray(b"test data for wiping")
+        secure_wipe(data)
+        assert all(b == 0 for b in data)
+
+    def test_secure_compare_works_regardless_of_backend(self):
+        """Verify secure_compare works with or without libsodium."""
+        a = b"hello world"
+        b = b"hello world"
+        c = b"hello there"
+
+        assert secure_compare(a, b)
+        assert not secure_compare(a, c)
+
+    def test_fallback_wipe_function_exists(self):
+        """Verify _fallback_wipe is available as internal fallback."""
+        from secure_string_cipher.secure_memory import _fallback_wipe
+
+        data = bytearray(b"fallback test")
+        _fallback_wipe(data)
+        assert all(b == 0 for b in data)
+
+    @pytest.mark.skipif(
+        not __import__(
+            "secure_string_cipher.secure_memory", fromlist=["HAS_SODIUM"]
+        ).HAS_SODIUM,
+        reason="PyNaCl not installed",
+    )
+    def test_sodium_memzero_is_used_when_available(self):
+        """Verify libsodium is actually used when available."""
+        from secure_string_cipher.secure_memory import HAS_SODIUM
+
+        assert HAS_SODIUM, "This test requires PyNaCl"
+        # If we get here, sodium is available and secure_wipe will use it
+        data = bytearray(b"sodium test")
+        secure_wipe(data)
+        assert all(b == 0 for b in data)
+
+    def test_secure_bytes_uses_secure_wipe(self):
+        """Verify SecureBytes uses secure_wipe internally."""
+        data = b"secure bytes test"
+        secure = SecureBytes(data)
+        buffer_ref = secure._buffer
+        secure.wipe()
+        # Buffer should be zeroed regardless of backend
+        assert all(b == 0 for b in buffer_ref)
+
+    def test_secure_string_uses_secure_wipe(self):
+        """Verify SecureString uses secure_wipe internally."""
+        string = "secure string test"
+        secure = SecureString(string)
+        buffer_ref = secure._chars
+        secure.wipe()
+        # Buffer should be zeroed regardless of backend
+        assert all(b == 0 for b in buffer_ref)

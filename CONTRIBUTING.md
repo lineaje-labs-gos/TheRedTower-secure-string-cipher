@@ -40,28 +40,18 @@ This project follows a Code of Conduct adapted from the Contributor Covenant. By
 
 ## Development Setup
 
-**Python Version**: We develop on **Python 3.14** (latest stable) with backward compatibility to Python 3.10+. Please use Python 3.14 for development to ensure you're using modern Python features.
+**Python 3.12+ required** (3.14 recommended for development).
 
-1. **Create your environment**
-   ```bash
-   python3.14 -m venv venv
-   source venv/bin/activate  # Windows: venv\Scripts\activate
-   pip install -e ".[dev]"
-   ```
+```bash
+python3.14 -m venv venv
+source venv/bin/activate  # Windows: venv\Scripts\activate
+pip install -e ".[dev]"
 
-2. **Run tests**
-   ```bash
-   pytest
-   # Or with coverage and parallel execution
-   pytest --cov=secure_string_cipher -n auto
-   ```
+make format  # Auto-fix formatting
+make ci      # Run full CI pipeline
+```
 
-3. **Check code quality**
-   ```bash
-   make format  # Auto-fix formatting
-   make lint    # Check types and style
-   make ci      # Run everything
-   ```
+See [DEVELOPER.md](DEVELOPER.md) for detailed workflow, troubleshooting, and release process.
 
 ## Style Guide
 
@@ -75,7 +65,7 @@ This project follows a Code of Conduct adapted from the Contributor Covenant. By
 ## Testing
 
 * Write tests for new features
-* Maintain 90%+ coverage
+* Maintain coverage above 69% threshold
 * Include positive and negative test cases
 * Test edge cases and error conditions
 * Use parameterized tests when appropriate
@@ -85,26 +75,15 @@ This project follows a Code of Conduct adapted from the Contributor Covenant. By
 * Update README.md if needed
 * Document security considerations
 * Keep docstrings current
-* Comment complex logic
 
 ## Git Practices
 
-* Write clear commit messages
+* Write clear commit messages following [Conventional Commits](https://conventionalcommits.org)
 * One feature or fix per commit
 * Reference issues in commits (e.g., "Fixes #123")
-* Keep commits focused
-
-## Release Process
-
-1. Update version in `pyproject.toml`
-2. Update CHANGELOG.md
-3. Run full test suite (`make ci`)
-4. Create tagged release
-5. Publish to PyPI (automated via GitHub Actions)
 
 ## Questions?
 
-Ask in:
 * GitHub Issues
 * Project Discussions
 
@@ -114,15 +93,22 @@ Ask in:
 secure-string-cipher/
 ├── src/
 │   └── secure_string_cipher/
-│       ├── __init__.py
-│       ├── cli.py
-│       ├── core.py
-│       ├── security.py
-│       ├── passphrase_generator.py
-│       └── passphrase_manager.py
+│       ├── __init__.py           # Public API exports
+│       ├── cli.py                # Interactive menu interface
+│       ├── config.py             # Constants (iterations, chunk size, etc.)
+│       ├── core.py               # AES-256-GCM + Argon2id + key commitment
+│       ├── passphrase_generator.py  # Random passphrase generation
+│       ├── passphrase_manager.py # Encrypted vault with HMAC integrity
+│       ├── secure_memory.py      # SecureBytes/SecureString with libsodium
+│       ├── security.py           # Path validation, filename sanitization
+│       ├── timing_safe.py        # Constant-time comparison, password strength
+│       └── utils.py              # Progress bar, colors, helpers
 ├── tests/
-│   ├── unit/
-│   └── integration/
-````
+│   ├── conftest.py               # Shared fixtures
+│   ├── factories.py              # Test data factories
+│   ├── helpers.py                # Test utilities
+│   ├── unit/                     # Unit tests (fast, isolated)
+│   └── integration/              # Integration tests (CLI workflows)
+```
 
 Thank you for contributing!

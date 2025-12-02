@@ -44,21 +44,24 @@ make ci        # Run complete CI checks
 - Config in `pyproject.toml` under `[tool.mypy]`
 
 ### pytest (Testing)
-- Runs automated tests (150+ tests)
-- Fixtures, parametrization, coverage reports
+- Runs automated tests (353+ tests)
+- Unit tests in `tests/unit/`, integration tests in `tests/integration/`
+- Markers: `@pytest.mark.unit`, `@pytest.mark.integration`, `@pytest.mark.security`
 - Run with `pytest tests/` or `make test`
 
 ## CI/CD
 
-The GitHub Actions workflow runs:
-1. Install dependencies (with caching)
-2. Check code quality (Ruff lint)
-3. Check formatting (Ruff format)
-4. Type check (mypy)
-5. Run tests (pytest + coverage)
-6. Upload coverage (Codecov)
+GitHub Actions runs a two-stage pipeline:
 
-All in one job, takes 1-2 minutes.
+1. **Quality checks** (Python 3.14 only):
+   - Ruff lint + format check
+   - mypy type checking
+   - Secret scanning (detect-secrets)
+   - Vulnerability scanning (pip-audit)
+
+2. **Test matrix** (Python 3.12, 3.13, 3.14 in parallel):
+   - Full pytest suite
+   - Coverage reporting on 3.14
 
 ## Common Tasks
 
@@ -88,13 +91,17 @@ ruff format --check src tests
 ### Run Specific Tests
 ```bash
 # One test file
-pytest tests/test_security.py
+pytest tests/unit/test_security.py
 
 # One test class
-pytest tests/test_security.py::TestFilenameSanitization
+pytest tests/unit/test_security.py::TestFilenameSanitization
 
 # One test function
-pytest tests/test_security.py::TestFilenameSanitization::test_safe_filename_unchanged
+pytest tests/unit/test_security.py::TestFilenameSanitization::test_safe_filename_unchanged
+
+# By marker
+pytest -m security
+pytest -m "unit and not slow"
 ```
 
 ### Debug CI Failures

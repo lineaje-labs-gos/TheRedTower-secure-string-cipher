@@ -4,26 +4,21 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python](https://img.shields.io/badge/Python-3.12+-blue.svg)](https://www.python.org/downloads/)
 
-A simple, secure AES-256-GCM encryption tool with an interactive menu interface.
-
-**Python Requirements:** 3.12+ (developed on 3.14)
+A security-focused AES-256-GCM encryption CLI tool with passphrase vault and modern cryptographic defaults.
 
 ## Features
 
-- Encrypt and decrypt text and files with AES-256-GCM
-- **Inline passphrase generation** – Type `/gen` at any password prompt to instantly generate a strong passphrase
-- Generate strong random passphrases with entropy calculation
-- Store passphrases in an encrypted vault (optional)
-  - HMAC-SHA256 integrity verification to detect tampering
-  - Automatic backup creation (keeps last 5 backups)
-  - Atomic writes to prevent corruption
-- Stream large files in chunks for low memory usage
-- Text output in Base64 for easy copy/paste
-- Clipboard integration available
+- **AES-256-GCM encryption** for text and files with authenticated encryption
+- **Argon2id key derivation** – memory-hard, GPU/ASIC resistant
+- **Key commitment scheme** – prevents partitioning oracle attacks
+- **Inline passphrase generation** – type `/gen` at any password prompt
+- **Encrypted passphrase vault** with HMAC-SHA256 integrity verification
+- **Secure memory handling** via libsodium (PyNaCl) when available
+- **Timing-safe operations** – constant-time comparisons prevent side-channel attacks
+- Chunked file streaming (64KB) for low memory usage
+- Automatic vault backups (last 5 kept)
 
 ## Installation
-
-> **Note**: Requires **Python 3.12 or newer**. Python 3.10 and 3.11 are no longer supported as of version 1.0.16.
 
 ```bash
 # Recommended: install with pipx
@@ -37,6 +32,8 @@ git clone https://github.com/TheRedTower/secure-string-cipher.git
 cd secure-string-cipher
 pip install .
 ```
+
+> Requires Python 3.12+
 
 ## Usage
 
@@ -99,35 +96,17 @@ Enter master password to encrypt vault: ••••••••••••
 ✅ Using this passphrase for current operation...
 ```
 
-This feature:
-- Generates alphanumeric passphrases with symbols (155+ bits entropy)
-- Optionally stores the passphrase in your encrypted vault
-- Skips confirmation since you already saw the generated password
-- Works seamlessly without leaving the encryption flow
+Generated passphrases have 155+ bits of entropy and can be stored directly in the encrypted vault.
 
-### Passphrase Vault Workflows
+### Passphrase Vault
 
-- **Auto-store prompt (option 5 or `/gen`):** Every time you generate a passphrase—either from menu option 5 or by typing `/gen` at a password prompt—the CLI immediately offers to store it in the vault. Answer `y` and you will be asked for a label plus the vault's master password; the passphrase is encrypted and written to `~/.secure-cipher/passphrase_vault.enc` with backups in `~/.secure-cipher/backups/`.
-- **Manual storage (option 6):** Already have a passphrase you want to save? Choose option 6 to provide the label, passphrase, and master password manually.
-- **Retrieval & maintenance (options 7-9):** Fetch stored secrets, list all labels, or update/delete entries without leaving the CLI. All operations require the master password and enforce vault integrity checks (HMAC + automatic backups).
+The vault stores passphrases encrypted with your master password at `~/.secure-cipher/passphrase_vault.enc`:
 
-### Upgrading
+- **Generate & store** – Option 5 or `/gen` during encryption
+- **Manual storage** – Option 6 for existing passphrases
+- **Retrieve/manage** – Options 7-9 for lookup, listing, and deletion
 
-Use pipx (recommended) or pip to upgrade to the latest released build:
-
-```bash
-pipx upgrade secure-string-cipher
-# or
-pip install --upgrade secure-string-cipher
-```
-
-Verify the version that is installed:
-
-```bash
-pip show secure-string-cipher | grep Version
-```
-
-Release 1.0.17 (and newer) includes the inline `/gen` prompt plus the vault menu actions described above. If `pip` reports you are already up to date but you are missing these features, ensure you are pointing at the same Python interpreter that runs `cipher-start` and rerun the upgrade command.
+All vault operations use HMAC integrity verification and maintain automatic backups.
 
 ## Docker
 
@@ -163,53 +142,35 @@ docker run --rm -it \
   ghcr.io/theredtower/secure-string-cipher:latest
 ```
 
-**Image details:** ~65MB Alpine-based image, Python 3.14, runs as non-root user (UID 1000), network-isolated, includes HMAC integrity verification and automatic backups (last 5 kept).
+**Image details:** ~65MB Alpine-based, runs as non-root (UID 1000), network-isolated.
 
 ## Security
 
-- **Encryption:** AES-256-GCM with authenticated encryption
-- **Key derivation:** PBKDF2-HMAC-SHA256 (390,000 iterations)
-- **Passphrase vault:** Encrypted with AES-256-GCM using your master password
-- **Vault integrity:** HMAC-SHA256 verification detects file tampering
-- **Automatic backups:** Last 5 vault backups saved in `~/.secure-cipher/backups/`
-- **File permissions:** Vault files are user-only (chmod 600)
-- **Password requirements:** Minimum 12 characters with complexity checks
+| Component | Implementation | Details |
+|-----------|---------------|---------|
+| **Encryption** | AES-256-GCM | Authenticated encryption, 128-bit tags |
+| **Key Derivation** | Argon2id | 64MB memory, 3 iterations, parallelism 4 |
+| **Key Commitment** | HMAC-SHA256 | Prevents partitioning oracle attacks |
+| **Vault Integrity** | HMAC-SHA256 | Detects tampering before decryption |
+| **Memory Security** | libsodium | `sodium_memzero()` via PyNaCl |
+| **Timing Safety** | Constant-time | All password/hash comparisons |
+
+**Additional protections:** Path traversal prevention, symlink attack detection, atomic writes, user-only file permissions (600), 12-character minimum password with complexity requirements.
+
+**Python memory limitations:** Even with libsodium, Python strings are immutable and GC may copy objects. Use `has_secure_memory()` to check libsodium availability.
 
 ## Development
 
-### Quick Start
-
 ```bash
-# Clone and install with dev dependencies
 git clone https://github.com/TheRedTower/secure-string-cipher.git
 cd secure-string-cipher
 pip install -e ".[dev]"
 
-# Format code before committing
-make format
-
-# Run the full test suite
-make ci
+make format   # Auto-format with Ruff
+make ci       # Run full CI pipeline (lint + type check + 353 tests)
 ```
 
-### Available Commands
-
-```bash
-make format      # Auto-format code with Ruff
-make lint        # Check formatting, types, and code quality
-make test        # Run test suite
-make test-cov    # Run tests with coverage report
-make clean       # Remove temporary files
-make ci          # Run complete CI pipeline locally
-```
-
-### Tools
-
-- **Ruff** – Fast linter and formatter (replaces Black, isort, flake8)
-- **mypy** – Static type checking
-- **pytest** – Testing framework with 150+ tests
-
-Run `make format` before pushing, then `make ci` to verify everything passes.
+See [DEVELOPER.md](DEVELOPER.md) for detailed development workflow and [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidelines.
 
 ## License
 

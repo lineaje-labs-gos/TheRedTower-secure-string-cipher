@@ -1,5 +1,10 @@
 """
 Core encryption functionality for secure-string-cipher
+
+This module provides AES-256-GCM encryption with:
+- Argon2id key derivation (memory-hard, GPU-resistant)
+- Key commitment (HMAC-SHA256) to prevent invisible salamanders attacks
+- File metadata storage for original filename restoration
 """
 
 from __future__ import annotations
@@ -9,24 +14,28 @@ import io
 import json
 import os
 import secrets
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import BinaryIO
 
 from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives import hashes, hmac
 from cryptography.hazmat.primitives.ciphers import (
     Cipher,
     algorithms,
     modes,
 )
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
 from .config import (
+    ARGON2_HASH_LENGTH,
+    ARGON2_MEMORY_COST,
+    ARGON2_PARALLELISM,
+    ARGON2_TIME_COST,
     CHUNK_SIZE,
     FILENAME_MAX_LENGTH,
-    KDF_ITERATIONS,
+    KEY_COMMITMENT_CONTEXT,
     MAX_FILE_SIZE,
     METADATA_MAGIC,
+    METADATA_VERSION,
     NONCE_SIZE,
     SALT_SIZE,
     TAG_SIZE,
@@ -37,15 +46,12 @@ __all__ = [
     "StreamProcessor",
     "CryptoError",
     "derive_key",
+    "compute_key_commitment",
+    "verify_key_commitment",
     "encrypt_text",
     "decrypt_text",
-    "encrypt_stream",
-    "decrypt_stream",
     "encrypt_file",
     "decrypt_file",
-    # v2 functions with metadata support
-    "encrypt_file_v2",
-    "decrypt_file_v2",
     "FileMetadata",
 ]
 
@@ -204,11 +210,16 @@ class StreamProcessor:
 
 def derive_key(passphrase: str, salt: bytes) -> bytes:
     """
-    Derive encryption key from passphrase using PBKDF2.
+    Derive encryption key using Argon2id (memory-hard KDF).
+
+    Argon2id is the recommended KDF for password hashing. It is:
+    - Memory-hard: Resistant to GPU/ASIC attacks
+    - Side-channel resistant: Hybrid of Argon2i and Argon2d
+    - Password Hashing Competition winner
 
     Args:
         passphrase: User-provided password
-        salt: Random salt for key derivation
+        salt: Random salt for key derivation (16+ bytes recommended)
 
     Returns:
         32-byte key suitable for AES-256
@@ -219,28 +230,155 @@ def derive_key(passphrase: str, salt: bytes) -> bytes:
     from .secure_memory import SecureBytes, SecureString
 
     try:
+        from argon2.low_level import Type, hash_secret_raw
+    except ImportError as e:
+        raise CryptoError(
+            "Argon2 support requires argon2-cffi. Install with: pip install argon2-cffi"
+        ) from e
+
+    try:
         with SecureString(passphrase) as secure_pass:
-            kdf = PBKDF2HMAC(
-                algorithm=hashes.SHA256(),
-                length=32,
-                salt=salt,
-                iterations=KDF_ITERATIONS,
-                backend=default_backend(),
-            )
             with SecureBytes(secure_pass.string.encode()) as secure_bytes:
-                return kdf.derive(secure_bytes.data)
+                key = hash_secret_raw(
+                    secret=bytes(secure_bytes.data),
+                    salt=salt,
+                    time_cost=ARGON2_TIME_COST,
+                    memory_cost=ARGON2_MEMORY_COST,
+                    parallelism=ARGON2_PARALLELISM,
+                    hash_len=ARGON2_HASH_LENGTH,
+                    type=Type.ID,  # Argon2id
+                )
+                return key
     except Exception as e:
-        raise CryptoError(f"Key derivation failed: {e}") from e
+        raise CryptoError(f"Argon2id key derivation failed: {e}") from e
 
 
-def encrypt_stream(r: StreamProcessor, w: StreamProcessor, passphrase: str) -> None:
+# =============================================================================
+# Key Commitment Functions
+# =============================================================================
+# Key commitment prevents "invisible salamanders" attacks where an attacker
+# crafts a ciphertext that decrypts to different plaintexts under different keys.
+# We compute HMAC-SHA256(key, context) and store it with the ciphertext.
+# =============================================================================
+
+
+def compute_key_commitment(key: bytes) -> bytes:
     """
-    Encrypt a file stream using AES-256-GCM.
+    Compute a key commitment value using HMAC-SHA256.
+
+    The commitment binds the ciphertext to a specific key, preventing
+    attacks where a ciphertext could decrypt to different plaintexts
+    under different keys.
 
     Args:
-        r: Input stream processor
-        w: Output stream processor
+        key: The derived encryption key (32 bytes)
+
+    Returns:
+        32-byte commitment value
+
+    Raises:
+        CryptoError: If commitment computation fails
+    """
+    try:
+        h = hmac.HMAC(key, hashes.SHA256(), backend=default_backend())
+        h.update(KEY_COMMITMENT_CONTEXT)
+        return h.finalize()
+    except Exception as e:
+        raise CryptoError(f"Key commitment computation failed: {e}") from e
+
+
+def verify_key_commitment(key: bytes, expected_commitment: bytes) -> bool:
+    """
+    Verify that a key matches the expected commitment.
+
+    Uses constant-time comparison to prevent timing attacks.
+
+    Args:
+        key: The derived encryption key (32 bytes)
+        expected_commitment: The commitment stored with the ciphertext
+
+    Returns:
+        True if the commitment matches, False otherwise
+    """
+    try:
+        # Use HMAC verify which does constant-time comparison internally
+        h = hmac.HMAC(key, hashes.SHA256(), backend=default_backend())
+        h.update(KEY_COMMITMENT_CONTEXT)
+        try:
+            h.verify(expected_commitment)
+            return True
+        except Exception:
+            return False
+    except CryptoError:
+        return False
+
+
+# =============================================================================
+# File Metadata
+# =============================================================================
+#
+# Format: MAGIC(5) + META_LEN(2 big-endian) + META_JSON + SALT(16) + NONCE(12) + CIPHERTEXT + TAG(16)
+#
+# The metadata JSON contains:
+#   - original_filename: The original filename before encryption
+#   - version: Metadata format version (always 4 for current implementation)
+#   - key_commitment: Base64-encoded HMAC-SHA256 commitment binding ciphertext to key
+# =============================================================================
+
+
+@dataclass
+class FileMetadata:
+    """Metadata stored with encrypted files."""
+
+    original_filename: str | None = None
+    version: int = field(default=METADATA_VERSION)
+    key_commitment: str | None = None  # Base64-encoded HMAC commitment
+
+    def to_bytes(self) -> bytes:
+        """Serialize metadata to JSON bytes."""
+        data: dict[str, str | int] = {
+            "version": self.version,
+        }
+        if self.original_filename:
+            # Truncate filename if too long
+            data["original_filename"] = self.original_filename[:FILENAME_MAX_LENGTH]
+        if self.key_commitment:
+            data["key_commitment"] = self.key_commitment
+        return json.dumps(data, separators=(",", ":")).encode("utf-8")
+
+    @classmethod
+    def from_bytes(cls, data: bytes) -> FileMetadata:
+        """Deserialize metadata from JSON bytes."""
+        try:
+            obj = json.loads(data.decode("utf-8"))
+            version = obj.get("version", METADATA_VERSION)
+            key_commitment = obj.get("key_commitment")
+            return cls(
+                original_filename=obj.get("original_filename"),
+                version=version,
+                key_commitment=key_commitment,
+            )
+        except (json.JSONDecodeError, UnicodeDecodeError) as e:
+            raise CryptoError(f"Invalid metadata format: {e}") from e
+
+
+# =============================================================================
+# Text Encryption/Decryption
+# =============================================================================
+
+
+def _encrypt_data(data: bytes, passphrase: str) -> bytes:
+    """
+    Encrypt data using AES-256-GCM with Argon2id and key commitment.
+
+    Internal function used by encrypt_text.
+
+    Args:
+        data: Data to encrypt
         passphrase: Encryption password
+
+    Returns:
+        Encrypted data with salt, nonce, and tag
 
     Raises:
         CryptoError: If encryption fails
@@ -253,55 +391,75 @@ def encrypt_stream(r: StreamProcessor, w: StreamProcessor, passphrase: str) -> N
         nonce = secrets.token_bytes(NONCE_SIZE)
 
         with SecureBytes(derive_key(passphrase, salt)) as secure_key:
-            w.write(salt + nonce)
+            # Compute key commitment
+            commitment = compute_key_commitment(secure_key.data)
+
             encryptor = Cipher(
                 algorithms.AES(secure_key.data),
                 modes.GCM(nonce),
                 backend=default_backend(),
             ).encryptor()
 
-            for chunk in iter(lambda: r.read(CHUNK_SIZE), b""):
-                w.write(encryptor.update(chunk))
-                add_timing_jitter()
+            add_timing_jitter()
+            ciphertext = encryptor.update(data) + encryptor.finalize()
+            tag = encryptor.tag
 
-            w.write(encryptor.finalize() + encryptor.tag)
+            # Format: salt + nonce + commitment + ciphertext + tag
+            return salt + nonce + commitment + ciphertext + tag
     except Exception as e:
         raise CryptoError(f"Encryption failed: {e}") from e
 
 
-def decrypt_stream(r: StreamProcessor, w: StreamProcessor, passphrase: str) -> None:
+def _decrypt_data(encrypted: bytes, passphrase: str) -> bytes:
     """
-    Decrypt a file stream using AES-256-GCM.
+    Decrypt data using AES-256-GCM with Argon2id and key commitment verification.
+
+    Internal function used by decrypt_text.
 
     Args:
-        r: Input stream processor
-        w: Output stream processor
+        encrypted: Encrypted data with salt, nonce, commitment, ciphertext, and tag
         passphrase: Decryption password
 
+    Returns:
+        Decrypted data
+
     Raises:
-        CryptoError: If decryption fails or data is corrupted
+        CryptoError: If decryption fails or key commitment verification fails
     """
     try:
-        header = r.read(SALT_SIZE + NONCE_SIZE)
-        if len(header) != SALT_SIZE + NONCE_SIZE:
-            raise CryptoError("Invalid encrypted file format")
+        # Format: salt(16) + nonce(12) + commitment(32) + ciphertext + tag(16)
+        min_len = SALT_SIZE + NONCE_SIZE + 32 + TAG_SIZE
+        if len(encrypted) < min_len:
+            raise CryptoError("Invalid encrypted data format")
 
-        salt, nonce = header[:SALT_SIZE], header[SALT_SIZE:]
-        data = r.read()
+        salt = encrypted[:SALT_SIZE]
+        nonce = encrypted[SALT_SIZE : SALT_SIZE + NONCE_SIZE]
+        commitment = encrypted[SALT_SIZE + NONCE_SIZE : SALT_SIZE + NONCE_SIZE + 32]
+        ciphertext_with_tag = encrypted[SALT_SIZE + NONCE_SIZE + 32 :]
 
-        if len(data) < TAG_SIZE:
-            raise CryptoError("File too short - not a valid encrypted file")
+        if len(ciphertext_with_tag) < TAG_SIZE:
+            raise CryptoError("Data too short - not valid encrypted data")
 
-        tag = data[-TAG_SIZE:]
-        ciphertext = data[:-TAG_SIZE]
-        key = derive_key(passphrase, salt)
+        tag = ciphertext_with_tag[-TAG_SIZE:]
+        ciphertext = ciphertext_with_tag[:-TAG_SIZE]
 
-        decryptor = Cipher(
-            algorithms.AES(key), modes.GCM(nonce, tag), backend=default_backend()
-        ).decryptor()
+        # Wrap key in SecureBytes to ensure it's wiped after use
+        from .secure_memory import SecureBytes
 
-        plaintext = decryptor.update(ciphertext) + decryptor.finalize()
-        w.write(plaintext)
+        with SecureBytes(derive_key(passphrase, salt)) as secure_key:
+            # Verify key commitment
+            if not verify_key_commitment(bytes(secure_key.data), commitment):
+                raise CryptoError(
+                    "Key commitment verification failed - wrong password or tampered data"
+                )
+
+            decryptor = Cipher(
+                algorithms.AES(secure_key.data),
+                modes.GCM(nonce, tag),
+                backend=default_backend(),
+            ).decryptor()
+
+            return decryptor.update(ciphertext) + decryptor.finalize()
     except CryptoError:
         raise
     except Exception as e:
@@ -310,7 +468,7 @@ def decrypt_stream(r: StreamProcessor, w: StreamProcessor, passphrase: str) -> N
 
 def encrypt_text(text: str, passphrase: str) -> str:
     """
-    Encrypt text using AES-256-GCM.
+    Encrypt text using AES-256-GCM with Argon2id and key commitment.
 
     Args:
         text: Text to encrypt
@@ -318,35 +476,22 @@ def encrypt_text(text: str, passphrase: str) -> str:
 
     Returns:
         Base64-encoded encrypted text
+
+    Raises:
+        CryptoError: If encryption fails
     """
-    ri = io.BytesIO(text.encode("utf-8"))
-    wi = io.BytesIO()
-
     try:
-        # Use in-memory processors to avoid closing the BytesIO buffers
-        r = InMemoryStreamProcessor(ri, "rb")
-        w = InMemoryStreamProcessor(wi, "wb")
-        encrypt_stream(r, w, passphrase)  # type: ignore[arg-type]
-
-        wi.seek(0)
-        encrypted = wi.getvalue()
+        encrypted = _encrypt_data(text.encode("utf-8"), passphrase)
         return base64.b64encode(encrypted).decode("ascii")
+    except CryptoError:
+        raise
     except Exception as e:
         raise CryptoError(f"Text encryption failed: {e}") from e
-    finally:
-        try:
-            ri.close()
-        except Exception:  # nosec B110
-            pass  # BytesIO close errors can be safely ignored
-        try:
-            wi.close()
-        except Exception:  # nosec B110
-            pass  # BytesIO close errors can be safely ignored
 
 
 def decrypt_text(token: str, passphrase: str) -> str:
     """
-    Decrypt text using AES-256-GCM.
+    Decrypt text using AES-256-GCM with Argon2id and key commitment verification.
 
     Args:
         token: Base64-encoded encrypted text
@@ -356,114 +501,28 @@ def decrypt_text(token: str, passphrase: str) -> str:
         Decrypted text
 
     Raises:
-        CryptoError: If decryption fails
+        CryptoError: If decryption fails or key commitment verification fails
     """
     try:
         encrypted = base64.b64decode(token)
     except ValueError:
-        # Wrap base64 errors to provide a consistent decryption error message
-        raise CryptoError("Text decryption failed") from None
-
-    ri = io.BytesIO(encrypted)
-    wi = io.BytesIO()
+        raise CryptoError("Text decryption failed: invalid base64") from None
 
     try:
-        r = InMemoryStreamProcessor(ri, "rb")
-        w = InMemoryStreamProcessor(wi, "wb")
-        decrypt_stream(r, w, passphrase)  # type: ignore[arg-type]
-        wi.seek(0)
-        result = wi.getvalue().decode("utf-8", "ignore")
-        return result
+        decrypted = _decrypt_data(encrypted, passphrase)
+        return decrypted.decode("utf-8", "ignore")
+    except CryptoError:
+        raise
     except Exception as e:
         raise CryptoError(f"Text decryption failed: {e}") from e
-    finally:
-        ri.close()
-        wi.close()
-
-
-def encrypt_file(input_path: str, output_path: str, passphrase: str) -> None:
-    """
-    Encrypt a file using AES-256-GCM.
-
-    Args:
-        input_path: Path to file to encrypt
-        output_path: Path for encrypted output
-        passphrase: Encryption password
-
-    Raises:
-        CryptoError: If encryption fails
-    """
-    with (
-        StreamProcessor(input_path, "rb") as r,
-        StreamProcessor(output_path, "wb") as w,
-    ):
-        encrypt_stream(r, w, passphrase)
-
-
-def decrypt_file(input_path: str, output_path: str, passphrase: str) -> None:
-    """
-    Decrypt a file using AES-256-GCM.
-
-    Args:
-        input_path: Path to encrypted file
-        output_path: Path for decrypted output
-        passphrase: Decryption password
-
-    Raises:
-        CryptoError: If decryption fails
-    """
-    with (
-        StreamProcessor(input_path, "rb") as r,
-        StreamProcessor(output_path, "wb") as w,
-    ):
-        decrypt_stream(r, w, passphrase)
 
 
 # =============================================================================
-# v2 File Format with Metadata Support
-# =============================================================================
-#
-# Format: MAGIC(5) + META_LEN(2 big-endian) + META_JSON + SALT(16) + NONCE(12) + CIPHERTEXT + TAG(16)
-#
-# The metadata JSON contains:
-#   - original_filename: The original filename before encryption
-#   - version: Metadata format version (currently 2)
-#
-# Legacy v1 files (without MAGIC header) are auto-detected and supported.
+# File Encryption/Decryption
 # =============================================================================
 
 
-@dataclass
-class FileMetadata:
-    """Metadata stored with encrypted files."""
-
-    original_filename: str | None = None
-    version: int = 2
-
-    def to_bytes(self) -> bytes:
-        """Serialize metadata to JSON bytes."""
-        data: dict[str, str | int] = {
-            "version": self.version,
-        }
-        if self.original_filename:
-            # Truncate filename if too long
-            data["original_filename"] = self.original_filename[:FILENAME_MAX_LENGTH]
-        return json.dumps(data, separators=(",", ":")).encode("utf-8")
-
-    @classmethod
-    def from_bytes(cls, data: bytes) -> FileMetadata:
-        """Deserialize metadata from JSON bytes."""
-        try:
-            obj = json.loads(data.decode("utf-8"))
-            return cls(
-                original_filename=obj.get("original_filename"),
-                version=obj.get("version", 2),
-            )
-        except (json.JSONDecodeError, UnicodeDecodeError) as e:
-            raise CryptoError(f"Invalid metadata format: {e}") from e
-
-
-def encrypt_file_v2(
+def encrypt_file(
     input_path: str,
     output_path: str,
     passphrase: str,
@@ -471,10 +530,10 @@ def encrypt_file_v2(
     store_filename: bool = True,
 ) -> None:
     """
-    Encrypt a file using AES-256-GCM with metadata support (v2 format).
+    Encrypt a file using AES-256-GCM with Argon2id and key commitment.
 
-    The v2 format stores optional metadata including the original filename,
-    which can be restored during decryption.
+    The file format stores metadata including the original filename
+    and a key commitment to prevent invisible salamanders attacks.
 
     Args:
         input_path: Path to file to encrypt
@@ -488,26 +547,33 @@ def encrypt_file_v2(
     from .secure_memory import SecureBytes
     from .timing_safe import add_timing_jitter
 
-    # Build metadata
-    metadata = FileMetadata(
-        original_filename=os.path.basename(input_path) if store_filename else None,
-        version=2,
-    )
-    meta_bytes = metadata.to_bytes()
-
-    if len(meta_bytes) > 65535:
-        raise CryptoError("Metadata too large")
-
     try:
         salt = secrets.token_bytes(SALT_SIZE)
         nonce = secrets.token_bytes(NONCE_SIZE)
 
         with SecureBytes(derive_key(passphrase, salt)) as secure_key:
+            # Compute key commitment to bind ciphertext to this specific key
+            commitment = compute_key_commitment(secure_key.data)
+            commitment_b64 = base64.b64encode(commitment).decode("ascii")
+
+            # Build metadata with key commitment
+            metadata = FileMetadata(
+                original_filename=os.path.basename(input_path)
+                if store_filename
+                else None,
+                version=METADATA_VERSION,
+                key_commitment=commitment_b64,
+            )
+            meta_bytes = metadata.to_bytes()
+
+            if len(meta_bytes) > 65535:
+                raise CryptoError("Metadata too large")
+
             with (
                 StreamProcessor(input_path, "rb") as r,
                 StreamProcessor(output_path, "wb") as w,
             ):
-                # Write v2 header: MAGIC + metadata length (2 bytes big-endian) + metadata
+                # Write header: MAGIC + metadata length (2 bytes big-endian) + metadata
                 w.write(METADATA_MAGIC)
                 w.write(len(meta_bytes).to_bytes(2, "big"))
                 w.write(meta_bytes)
@@ -533,7 +599,7 @@ def encrypt_file_v2(
         raise CryptoError(f"Encryption failed: {e}") from e
 
 
-def decrypt_file_v2(
+def decrypt_file(
     input_path: str,
     output_path: str | None,
     passphrase: str,
@@ -541,9 +607,7 @@ def decrypt_file_v2(
     restore_filename: bool = True,
 ) -> tuple[str, FileMetadata | None]:
     """
-    Decrypt a file using AES-256-GCM with metadata support.
-
-    Automatically detects v1 (legacy) and v2 file formats.
+    Decrypt a file using AES-256-GCM with Argon2id and key commitment verification.
 
     Args:
         input_path: Path to encrypted file
@@ -552,51 +616,46 @@ def decrypt_file_v2(
         restore_filename: If True and output_path is None, attempt to restore original filename
 
     Returns:
-        Tuple of (actual_output_path, metadata_or_none)
+        Tuple of (actual_output_path, metadata)
 
     Raises:
-        CryptoError: If decryption fails
+        CryptoError: If decryption fails or key commitment verification fails
     """
     from .security import sanitize_filename
 
     try:
         with open(input_path, "rb") as f:
-            # Check for v2 magic header
+            # Check for magic header
             magic = f.read(len(METADATA_MAGIC))
 
-            if magic == METADATA_MAGIC:
-                # v2 format with metadata
-                meta_len_bytes = f.read(2)
-                if len(meta_len_bytes) != 2:
-                    raise CryptoError("Invalid v2 file: truncated metadata length")
-                meta_len = int.from_bytes(meta_len_bytes, "big")
+            if magic != METADATA_MAGIC:
+                raise CryptoError(
+                    "Invalid file format: missing magic header. "
+                    "This file may have been encrypted with an older version."
+                )
 
-                if meta_len > 65535:
-                    raise CryptoError("Invalid v2 file: metadata too large")
+            # Read metadata
+            meta_len_bytes = f.read(2)
+            if len(meta_len_bytes) != 2:
+                raise CryptoError("Invalid file: truncated metadata length")
+            meta_len = int.from_bytes(meta_len_bytes, "big")
 
-                meta_bytes = f.read(meta_len)
-                if len(meta_bytes) != meta_len:
-                    raise CryptoError("Invalid v2 file: truncated metadata")
+            if meta_len > 65535:
+                raise CryptoError("Invalid file: metadata too large")
 
-                metadata = FileMetadata.from_bytes(meta_bytes)
+            meta_bytes = f.read(meta_len)
+            if len(meta_bytes) != meta_len:
+                raise CryptoError("Invalid file: truncated metadata")
 
-                # Read encryption header
-                header = f.read(SALT_SIZE + NONCE_SIZE)
-                if len(header) != SALT_SIZE + NONCE_SIZE:
-                    raise CryptoError("Invalid encrypted file format")
+            metadata = FileMetadata.from_bytes(meta_bytes)
 
-                salt, nonce = header[:SALT_SIZE], header[SALT_SIZE:]
-                encrypted_data = f.read()
+            # Read encryption header
+            header = f.read(SALT_SIZE + NONCE_SIZE)
+            if len(header) != SALT_SIZE + NONCE_SIZE:
+                raise CryptoError("Invalid encrypted file format")
 
-            else:
-                # v1 format (legacy) - magic is actually start of salt
-                metadata = None
-                header = magic + f.read(SALT_SIZE + NONCE_SIZE - len(magic))
-                if len(header) != SALT_SIZE + NONCE_SIZE:
-                    raise CryptoError("Invalid encrypted file format")
-
-                salt, nonce = header[:SALT_SIZE], header[SALT_SIZE:]
-                encrypted_data = f.read()
+            salt, nonce = header[:SALT_SIZE], header[SALT_SIZE:]
+            encrypted_data = f.read()
 
         # Determine output path
         if output_path is None:
@@ -620,13 +679,35 @@ def decrypt_file_v2(
 
         tag = encrypted_data[-TAG_SIZE:]
         ciphertext = encrypted_data[:-TAG_SIZE]
-        key = derive_key(passphrase, salt)
 
-        decryptor = Cipher(
-            algorithms.AES(key), modes.GCM(nonce, tag), backend=default_backend()
-        ).decryptor()
+        # Wrap key in SecureBytes to ensure it's wiped after use
+        from .secure_memory import SecureBytes
 
-        plaintext = decryptor.update(ciphertext) + decryptor.finalize()
+        with SecureBytes(derive_key(passphrase, salt)) as secure_key:
+            # Verify key commitment
+            if metadata.key_commitment is not None:
+                try:
+                    expected_commitment = base64.b64decode(metadata.key_commitment)
+                    if not verify_key_commitment(
+                        bytes(secure_key.data), expected_commitment
+                    ):
+                        raise CryptoError(
+                            "Key commitment verification failed - wrong password or tampered file"
+                        )
+                except (ValueError, TypeError) as e:
+                    raise CryptoError(f"Invalid key commitment format: {e}") from e
+            else:
+                raise CryptoError(
+                    "File missing key commitment - may have been tampered with"
+                )
+
+            decryptor = Cipher(
+                algorithms.AES(secure_key.data),
+                modes.GCM(nonce, tag),
+                backend=default_backend(),
+            ).decryptor()
+
+            plaintext = decryptor.update(ciphertext) + decryptor.finalize()
 
         with StreamProcessor(output_path, "wb") as w:
             w.write(plaintext)

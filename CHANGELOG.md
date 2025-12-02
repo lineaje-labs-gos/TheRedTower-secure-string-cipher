@@ -1,5 +1,139 @@
 # Changelog
 
+## [1.0.22] - 2025-12-02
+
+### Legacy Code Removal (Development Release)
+
+Development release that removes all legacy encryption code, establishing a clean single-path implementation. This is a **breaking change** - files encrypted with versions prior to 1.0.19 cannot be decrypted. Intended for testing before v1.1.0 stable release.
+
+#### Breaking Changes
+
+- **Removed Functions**:
+  - `encrypt_stream()`, `decrypt_stream()` - v1 stream encryption
+  - `derive_key_pbkdf2()` - PBKDF2 key derivation
+  - `encrypt_file_v2()`, `decrypt_file_v2()` - Renamed to `encrypt_file()`, `decrypt_file()`
+  - `derive_key_argon2id()` - Renamed to `derive_key()`
+  - `KDFAlgorithm` type alias, `get_default_kdf()`
+
+- **Removed Configuration**:
+  - `KDF_ALGORITHM`, `KDF_ITERATIONS`, `ARGON2_TYPE`
+
+- **File Format**:
+  - Only v4 format supported (Argon2id + key commitment)
+  - v1/v2/v3 files fail with "missing magic header" error
+  - Key commitment required - missing commitment fails decryption
+
+#### Changes
+
+- Single implementation path: Argon2id KDF with HMAC-SHA256 key commitment
+- Simplified API: `encrypt_file()`, `decrypt_file()`, `derive_key()`
+- Text encryption now uses Argon2id with key commitment
+- ~350 lines of legacy code removed from `core.py`
+
+#### Security
+
+- KDF: Argon2id (time_cost=3, memory_cost=64MB, parallelism=4)
+- Encryption: AES-256-GCM with random salt and nonce
+- Key commitment: HMAC-SHA256 prevents invisible salamanders attacks
+- File format: MAGIC(5) + META_LEN(2) + META_JSON + SALT(16) + NONCE(12) + CIPHERTEXT + TAG(16)
+
+#### Tests
+
+- 353 tests total (expanded with secure memory and timing tests)
+- Rewrote `test_core.py`, `test_kdf.py` for Argon2id-only
+- Comprehensive `test_secure_memory.py` and `test_timing_safe.py`
+- Removed legacy backward compatibility tests
+
+---
+
+## [1.0.21] - 2025-12-02
+
+### Key Commitment Scheme
+
+Introduces key commitment to prevent "invisible salamanders" attacks where an attacker crafts a ciphertext that decrypts to different plaintexts under different keys.
+
+- **Implementation**:
+  - `compute_key_commitment(key)` - HMAC-SHA256 commitment binding ciphertext to key
+  - `verify_key_commitment(key, expected)` - Constant-time verification before decryption
+
+- **File Format v4**:
+  - Metadata includes `key_commitment` field (base64-encoded HMAC)
+  - Wrong passwords fail early before GCM decryption
+  - Backward compatible: v2/v3 files decrypt without commitment check
+
+- **Security**:
+  - Blocks invisible salamanders attacks
+  - Fast failure on wrong password via commitment check
+  - Detects ciphertext manipulation targeting multiple keys
+
+- **Configuration**:
+  - `KEY_COMMITMENT_SIZE = 32`
+  - `KEY_COMMITMENT_CONTEXT` - Domain separation string
+
+- **API**:
+  - Exported: `compute_key_commitment`, `verify_key_commitment`
+  - `FileMetadata.key_commitment` field (v4 format)
+
+- **Tests**: 254 → 268 (+14 key commitment tests)
+
+## [1.0.20] - 2025-06-24
+
+### Argon2id Key Derivation Function
+
+Introduces Argon2id as the default KDF, replacing PBKDF2 for new encryptions. Argon2id is the Password Hashing Competition winner and provides superior protection against GPU/ASIC attacks through memory hardness.
+
+- **Argon2id Implementation**:
+  - New default KDF for all file encryption (`encrypt_file_v2`)
+  - Memory-hard algorithm resistant to brute-force attacks
+  - Parameters: time_cost=3, memory_cost=64MB, parallelism=4
+  - Exceeds OWASP 2024 recommendations for password hashing
+
+- **New Functions in `core.py`**:
+  - `derive_key_argon2id(passphrase, salt)` - Argon2id key derivation
+  - `derive_key_pbkdf2(passphrase, salt)` - PBKDF2 (extracted for clarity)
+  - `derive_key(passphrase, salt, algorithm=None)` - Algorithm dispatcher
+
+- **File Format v3**:
+  - Metadata now stores KDF algorithm used for encryption
+  - Enables automatic selection of correct KDF during decryption
+  - Backward compatible: v2 files (no KDF field) default to PBKDF2
+
+- **Backward Compatibility**:
+  - Legacy v1 format (`encrypt_stream`, `encrypt_text`) always uses PBKDF2
+  - `decrypt_file_v2()` reads KDF from metadata, defaults to PBKDF2 for old files
+  - Text encryption (`encrypt_text`/`decrypt_text`) continues using PBKDF2
+  - Existing encrypted files decrypt without modification
+
+- **Configuration (`config.py`)**:
+  - `KDF_ALGORITHM = "argon2id"` - Default for new v2/v3 files
+  - `ARGON2_TIME_COST = 3` - CPU cost parameter
+  - `ARGON2_MEMORY_COST = 65536` - Memory cost (64 KB * 1024 = 64 MB)
+  - `ARGON2_PARALLELISM = 4` - Lane count
+  - `ARGON2_HASH_LENGTH = 32` - Output key length (256-bit)
+
+- **Dependencies**:
+  - Added `argon2-cffi>=25.1.0` to project dependencies
+  - Uses `argon2.low_level.hash_secret_raw()` for direct key derivation
+
+- **Public API Updates**:
+  - Exported: `derive_key_argon2id`, `derive_key_pbkdf2` (new KDF section)
+  - `FileMetadata` now includes `kdf` field for algorithm identification
+
+- **Security Benefits**:
+  - **GPU/ASIC Resistance**: 64MB memory requirement makes parallel attacks expensive
+  - **Side-channel Protection**: Argon2id hybrid mode combines data-dependent and data-independent addressing
+  - **Future-proof**: Separating KDF from file format allows algorithm upgrades
+  - **Auditable**: KDF choice stored in file metadata for transparency
+
+- **Test Suite**: 225 → 254 tests (+29 new KDF tests)
+  - `TestArgon2idKDF`: Key length, consistency, salt impact, configuration validation
+  - `TestPBKDF2KDF`: Legacy algorithm verification
+  - `TestKDFSelection`: Algorithm dispatch, default selection, error handling
+  - `TestFileMetadataKDF`: Metadata serialization, backward compatibility
+  - `TestFileEncryptionKDF`: End-to-end encryption/decryption with new KDF
+  - `TestTextEncryptionKDF`: Text roundtrip verification
+  - `TestKDFSecurity`: Timing consistency, minimum work factor
+
 ## [1.0.19] - 2025-06-24
 
 ### Added - Original Filename Metadata Storage (v2 File Format)
@@ -47,9 +181,6 @@ This release introduces a major enhancement: encrypted files can now store and r
   - `TestEncryptFileV2`: Encryption with/without filename, restoration
   - `TestV2BackwardCompatibility`: v1 file detection and decryption
   - `TestV2ErrorHandling`: Wrong password, corrupted metadata, truncated files
-
-## [Unreleased]
-- _No changes yet_
 
 ## [1.0.17] - 2025-11-17
 

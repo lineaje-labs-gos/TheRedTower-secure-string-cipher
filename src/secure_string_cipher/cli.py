@@ -9,9 +9,9 @@ import sys
 from typing import TextIO
 
 from .core import (
-    decrypt_file_v2,
+    decrypt_file,
     decrypt_text,
-    encrypt_file_v2,
+    encrypt_file,
     encrypt_text,
 )
 from .passphrase_generator import generate_passphrase
@@ -752,7 +752,7 @@ def main(
                             out_stream.flush()
                         case 3:
                             out_path = payload + ".enc"
-                            encrypt_file_v2(
+                            encrypt_file(
                                 payload, out_path, password, store_filename=True
                             )
                             out_stream.write(f"Encrypted file -> {out_path}\n")
@@ -761,8 +761,8 @@ def main(
                             )
                             out_stream.flush()
                         case 4:
-                            # Use v2 decryption with automatic filename restoration
-                            actual_path, metadata = decrypt_file_v2(
+                            # Decrypt with automatic filename restoration
+                            actual_path, metadata = decrypt_file(
                                 payload, None, password, restore_filename=True
                             )
                             out_stream.write(f"Decrypted file -> {actual_path}\n")

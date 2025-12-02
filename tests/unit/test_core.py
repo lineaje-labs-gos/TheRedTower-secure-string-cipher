@@ -1,5 +1,12 @@
 """
-Test suite for string_cipher.py core functionality
+Test suite for secure-string-cipher core encryption functionality.
+
+Tests cover:
+- Password validation
+- Key derivation with Argon2id
+- Text encryption/decryption
+- File encryption/decryption with metadata
+- Key commitment verification
 """
 
 import contextlib
@@ -14,13 +21,13 @@ from secure_string_cipher.core import (
     CryptoError,
     FileMetadata,
     StreamProcessor,
-    decrypt_file_v2,
-    decrypt_stream,
+    compute_key_commitment,
+    decrypt_file,
     decrypt_text,
     derive_key,
-    encrypt_file_v2,
-    encrypt_stream,
+    encrypt_file,
     encrypt_text,
+    verify_key_commitment,
 )
 from secure_string_cipher.timing_safe import check_password_strength
 
@@ -83,7 +90,7 @@ class TestPasswordValidation:
 
 
 class TestKeyDerivation:
-    """Test key derivation functionality."""
+    """Test Argon2id key derivation functionality."""
 
     def test_key_length(self):
         """Test if derived key has correct length."""
@@ -108,8 +115,38 @@ class TestKeyDerivation:
         assert key1 != key2
 
 
+class TestKeyCommitment:
+    """Test key commitment functionality."""
+
+    def test_compute_key_commitment(self):
+        """Test key commitment computation."""
+        key = derive_key("testpassword123!@#", b"salt" * 4)
+        commitment = compute_key_commitment(key)
+        assert len(commitment) == 32  # HMAC-SHA256 output
+
+    def test_verify_key_commitment_correct(self):
+        """Test key commitment verification with correct key."""
+        key = derive_key("testpassword123!@#", b"salt" * 4)
+        commitment = compute_key_commitment(key)
+        assert verify_key_commitment(key, commitment) is True
+
+    def test_verify_key_commitment_wrong_key(self):
+        """Test key commitment verification with wrong key."""
+        key1 = derive_key("testpassword123!@#", b"salt" * 4)
+        key2 = derive_key("differentpassword!@#", b"salt" * 4)
+        commitment = compute_key_commitment(key1)
+        assert verify_key_commitment(key2, commitment) is False
+
+    def test_commitment_consistency(self):
+        """Test that same key produces same commitment."""
+        key = derive_key("testpassword123!@#", b"salt" * 4)
+        commitment1 = compute_key_commitment(key)
+        commitment2 = compute_key_commitment(key)
+        assert commitment1 == commitment2
+
+
 class TestTextEncryption:
-    """Test text encryption/decryption."""
+    """Test text encryption/decryption with Argon2id and key commitment."""
 
     @pytest.mark.parametrize(
         "text",
@@ -140,74 +177,12 @@ class TestTextEncryption:
             decrypt_text("invalid base64!", TEST_PASSWORDS["VALID"])
         assert "Text decryption failed" in str(exc_info.value)
 
-
-class TestFileEncryption:
-    """Test file encryption/decryption."""
-
-    def test_file_roundtrip(self, temp_file):
-        """Test if file can be encrypted and decrypted correctly."""
-        original_data = b"Hello, World!\n" * 1000
-
-        # Write original data
-        with open(temp_file, "wb") as f:
-            f.write(original_data)
-
-        # Encrypt
-        enc_file = temp_file + ".enc"
-        with (
-            StreamProcessor(temp_file, "rb") as r,
-            StreamProcessor(enc_file, "wb") as w,
-        ):
-            encrypt_stream(r, w, TEST_PASSWORDS["VALID"])
-
-        # Decrypt
-        dec_file = temp_file + ".dec"
-        with StreamProcessor(enc_file, "rb") as r, StreamProcessor(dec_file, "wb") as w:
-            decrypt_stream(r, w, TEST_PASSWORDS["VALID"])
-
-        # Verify
-        with open(dec_file, "rb") as f:
-            decrypted_data = f.read()
-
-        assert decrypted_data == original_data
-
-        # Cleanup
-        os.unlink(enc_file)
-        os.unlink(dec_file)
-
-    def test_streaming_large_file(self, temp_file):
-        """Test encryption/decryption of large file in chunks."""
-        # Create 10MB file
-        chunk_size = 64 * 1024  # 64 KiB
-        chunks = 160  # ~10 MB
-        original_data = os.urandom(chunk_size * chunks)
-
-        with open(temp_file, "wb") as f:
-            f.write(original_data)
-
-        enc_file = temp_file + ".enc"
-        dec_file = temp_file + ".dec"
-
-        # Encrypt
-        with (
-            StreamProcessor(temp_file, "rb") as r,
-            StreamProcessor(enc_file, "wb") as w,
-        ):
-            encrypt_stream(r, w, TEST_PASSWORDS["VALID"])
-
-        # Decrypt
-        with StreamProcessor(enc_file, "rb") as r, StreamProcessor(dec_file, "wb") as w:
-            decrypt_stream(r, w, TEST_PASSWORDS["VALID"])
-
-        # Verify
-        with open(dec_file, "rb") as f:
-            decrypted_data = f.read()
-
-        assert decrypted_data == original_data
-
-        # Cleanup
-        os.unlink(enc_file)
-        os.unlink(dec_file)
+    def test_encryption_produces_different_output(self):
+        """Test that same text encrypted twice produces different output (random salt)."""
+        text = "Test message"
+        encrypted1 = encrypt_text(text, TEST_PASSWORDS["VALID"])
+        encrypted2 = encrypt_text(text, TEST_PASSWORDS["VALID"])
+        assert encrypted1 != encrypted2
 
 
 class TestStreamProcessor:
@@ -249,43 +224,43 @@ class TestStreamProcessor:
             assert data == test_data
 
 
-# =============================================================================
-# v2 File Format with Metadata Support Tests
-# =============================================================================
-
-
 class TestFileMetadata:
     """Test FileMetadata serialization."""
 
     def test_metadata_to_bytes(self):
         """Test metadata serializes to JSON bytes."""
-        meta = FileMetadata(original_filename="test.txt", version=2)
+        meta = FileMetadata(original_filename="test.txt", version=4)
         data = meta.to_bytes()
         assert b"test.txt" in data
-        assert b'"version":2' in data
+        assert b'"version":4' in data
 
     def test_metadata_from_bytes(self):
         """Test metadata deserializes from JSON bytes."""
-        data = b'{"version":2,"original_filename":"hello.txt"}'
+        data = b'{"version":4,"original_filename":"hello.txt"}'
         meta = FileMetadata.from_bytes(data)
         assert meta.original_filename == "hello.txt"
-        assert meta.version == 2
+        assert meta.version == 4
 
     def test_metadata_roundtrip(self):
         """Test metadata serialization roundtrip."""
-        original = FileMetadata(original_filename="document.pdf", version=2)
+        original = FileMetadata(
+            original_filename="document.pdf",
+            version=4,
+            key_commitment="abc123",
+        )
         serialized = original.to_bytes()
         restored = FileMetadata.from_bytes(serialized)
         assert restored.original_filename == original.original_filename
         assert restored.version == original.version
+        assert restored.key_commitment == original.key_commitment
 
     def test_metadata_without_filename(self):
         """Test metadata without original filename."""
-        meta = FileMetadata(original_filename=None, version=2)
+        meta = FileMetadata(original_filename=None, version=4)
         data = meta.to_bytes()
         restored = FileMetadata.from_bytes(data)
         assert restored.original_filename is None
-        assert restored.version == 2
+        assert restored.version == 4
 
     def test_metadata_invalid_json(self):
         """Test handling of invalid JSON metadata."""
@@ -295,14 +270,14 @@ class TestFileMetadata:
     def test_metadata_filename_truncation(self):
         """Test that very long filenames are truncated."""
         long_name = "a" * 500  # Longer than FILENAME_MAX_LENGTH (255)
-        meta = FileMetadata(original_filename=long_name, version=2)
+        meta = FileMetadata(original_filename=long_name, version=4)
         serialized = meta.to_bytes()
         restored = FileMetadata.from_bytes(serialized)
         assert len(restored.original_filename) == 255
 
 
-class TestEncryptFileV2:
-    """Test v2 file encryption with metadata."""
+class TestFileEncryption:
+    """Test file encryption with metadata and key commitment."""
 
     @pytest.fixture
     def temp_files(self, monkeypatch):
@@ -320,16 +295,16 @@ class TestEncryptFileV2:
             with contextlib.suppress(OSError):
                 os.unlink(path)
 
-    def test_encrypt_v2_with_filename(self, temp_files):
-        """Test v2 encryption stores original filename."""
+    def test_encrypt_with_filename(self, temp_files):
+        """Test encryption stores original filename."""
         input_path, output_path, dec_path = temp_files
-        test_data = b"Hello, v2 encryption!"
+        test_data = b"Hello, encryption!"
 
         with open(input_path, "wb") as f:
             f.write(test_data)
 
         # Encrypt with metadata
-        encrypt_file_v2(
+        encrypt_file(
             input_path, output_path, TEST_PASSWORDS["VALID"], store_filename=True
         )
 
@@ -339,19 +314,20 @@ class TestEncryptFileV2:
             assert magic == METADATA_MAGIC
 
         # Decrypt and verify
-        actual_path, metadata = decrypt_file_v2(
+        actual_path, metadata = decrypt_file(
             output_path, dec_path, TEST_PASSWORDS["VALID"]
         )
 
         assert actual_path == dec_path
         assert metadata is not None
         assert metadata.original_filename == os.path.basename(input_path)
+        assert metadata.key_commitment is not None
 
         with open(dec_path, "rb") as f:
             assert f.read() == test_data
 
-    def test_encrypt_v2_without_filename(self, temp_files):
-        """Test v2 encryption without storing filename."""
+    def test_encrypt_without_filename(self, temp_files):
+        """Test encryption without storing filename."""
         input_path, output_path, dec_path = temp_files
         test_data = b"No filename stored"
 
@@ -359,12 +335,12 @@ class TestEncryptFileV2:
             f.write(test_data)
 
         # Encrypt without filename
-        encrypt_file_v2(
+        encrypt_file(
             input_path, output_path, TEST_PASSWORDS["VALID"], store_filename=False
         )
 
         # Decrypt and verify
-        actual_path, metadata = decrypt_file_v2(
+        actual_path, metadata = decrypt_file(
             output_path, dec_path, TEST_PASSWORDS["VALID"]
         )
 
@@ -372,8 +348,8 @@ class TestEncryptFileV2:
         assert metadata is not None
         assert metadata.original_filename is None
 
-    def test_decrypt_v2_restore_filename(self, temp_files, tmp_path):
-        """Test v2 decryption restores original filename."""
+    def test_decrypt_restore_filename(self, temp_files, tmp_path):
+        """Test decryption restores original filename."""
         input_path, output_path, _ = temp_files
         test_data = b"Restore my name!"
 
@@ -383,14 +359,14 @@ class TestEncryptFileV2:
 
         # Encrypt
         enc_path = str(named_file) + ".enc"
-        encrypt_file_v2(
+        encrypt_file(
             str(named_file), enc_path, TEST_PASSWORDS["VALID"], store_filename=True
         )
 
         # Delete original and decrypt (filename should be restored)
         named_file.unlink()
 
-        actual_path, metadata = decrypt_file_v2(
+        actual_path, metadata = decrypt_file(
             enc_path, None, TEST_PASSWORDS["VALID"], restore_filename=True
         )
 
@@ -404,20 +380,20 @@ class TestEncryptFileV2:
         os.unlink(actual_path)
         os.unlink(enc_path)
 
-    def test_decrypt_v2_without_restore(self, temp_files, tmp_path):
-        """Test v2 decryption without restoring filename."""
+    def test_decrypt_without_restore(self, temp_files, tmp_path):
+        """Test decryption without restoring filename."""
         test_data = b"Keep encrypted name!"
 
         named_file = tmp_path / "original.txt"
         named_file.write_bytes(test_data)
 
         enc_path = str(named_file) + ".enc"
-        encrypt_file_v2(
+        encrypt_file(
             str(named_file), enc_path, TEST_PASSWORDS["VALID"], store_filename=True
         )
 
         # Decrypt without restoring filename
-        actual_path, metadata = decrypt_file_v2(
+        actual_path, metadata = decrypt_file(
             enc_path, None, TEST_PASSWORDS["VALID"], restore_filename=False
         )
 
@@ -431,74 +407,8 @@ class TestEncryptFileV2:
         os.unlink(enc_path)
 
 
-class TestV2BackwardCompatibility:
-    """Test v2 decryption handles v1 (legacy) files."""
-
-    @pytest.fixture
-    def temp_files(self, monkeypatch):
-        """Create temporary files for testing and clean up after."""
-        # Auto-approve overwrite prompts during tests
-        monkeypatch.setattr("builtins.input", lambda _: "y")
-
-        files = []
-        for _ in range(3):
-            fd, path = tempfile.mkstemp()
-            os.close(fd)
-            files.append(path)
-        yield files
-        for path in files:
-            with contextlib.suppress(OSError):
-                os.unlink(path)
-
-    def test_decrypt_v1_file_with_v2_function(self, temp_files):
-        """Test v2 decryption function works with v1 encrypted files."""
-        input_path, enc_path, dec_path = temp_files
-        test_data = b"Legacy v1 format data"
-
-        with open(input_path, "wb") as f:
-            f.write(test_data)
-
-        # Encrypt with v1 (old) function
-        with (
-            StreamProcessor(input_path, "rb") as r,
-            StreamProcessor(enc_path, "wb") as w,
-        ):
-            encrypt_stream(r, w, TEST_PASSWORDS["VALID"])
-
-        # Decrypt with v2 function
-        actual_path, metadata = decrypt_file_v2(
-            enc_path, dec_path, TEST_PASSWORDS["VALID"]
-        )
-
-        assert actual_path == dec_path
-        assert metadata is None  # v1 files have no metadata
-
-        with open(dec_path, "rb") as f:
-            assert f.read() == test_data
-
-    def test_v1_file_detection(self, temp_files):
-        """Test that v1 files (without magic header) are correctly detected."""
-        input_path, enc_path, _ = temp_files
-        test_data = b"v1 file content"
-
-        with open(input_path, "wb") as f:
-            f.write(test_data)
-
-        # Create v1 encrypted file
-        with (
-            StreamProcessor(input_path, "rb") as r,
-            StreamProcessor(enc_path, "wb") as w,
-        ):
-            encrypt_stream(r, w, TEST_PASSWORDS["VALID"])
-
-        # Verify file doesn't start with v2 magic
-        with open(enc_path, "rb") as f:
-            header = f.read(len(METADATA_MAGIC))
-            assert header != METADATA_MAGIC
-
-
-class TestV2ErrorHandling:
-    """Test error handling in v2 encryption/decryption."""
+class TestErrorHandling:
+    """Test error handling in encryption/decryption."""
 
     @pytest.fixture
     def temp_file(self, monkeypatch):
@@ -512,8 +422,8 @@ class TestV2ErrorHandling:
         with contextlib.suppress(OSError):
             os.unlink(path)
 
-    def test_wrong_password_v2(self, temp_file):
-        """Test v2 decryption with wrong password."""
+    def test_wrong_password(self, temp_file):
+        """Test decryption with wrong password."""
         test_data = b"Secret data"
 
         with open(temp_file, "wb") as f:
@@ -522,10 +432,10 @@ class TestV2ErrorHandling:
         enc_path = temp_file + ".enc"
         dec_path = temp_file + ".dec"
 
-        encrypt_file_v2(temp_file, enc_path, TEST_PASSWORDS["VALID"])
+        encrypt_file(temp_file, enc_path, TEST_PASSWORDS["VALID"])
 
         with pytest.raises(CryptoError):
-            decrypt_file_v2(enc_path, dec_path, TEST_PASSWORDS["NO_SYMBOLS"])
+            decrypt_file(enc_path, dec_path, TEST_PASSWORDS["NO_SYMBOLS"])
 
         # Cleanup
         with contextlib.suppress(OSError):
@@ -533,7 +443,7 @@ class TestV2ErrorHandling:
             os.unlink(dec_path)
 
     def test_corrupted_metadata(self, temp_file):
-        """Test handling of corrupted metadata in v2 file."""
+        """Test handling of corrupted metadata in file."""
         # Create a file with valid magic but invalid metadata
         with open(temp_file, "wb") as f:
             f.write(METADATA_MAGIC)
@@ -541,13 +451,22 @@ class TestV2ErrorHandling:
             f.write(b"invalid json!!")  # But only 14 bytes of garbage
 
         with pytest.raises(CryptoError, match="truncated metadata"):
-            decrypt_file_v2(temp_file, temp_file + ".dec", TEST_PASSWORDS["VALID"])
+            decrypt_file(temp_file, temp_file + ".dec", TEST_PASSWORDS["VALID"])
 
-    def test_truncated_v2_file(self, temp_file):
-        """Test handling of truncated v2 file."""
+    def test_truncated_file(self, temp_file):
+        """Test handling of truncated file."""
         # Create a truncated file with just magic header
         with open(temp_file, "wb") as f:
             f.write(METADATA_MAGIC)
 
         with pytest.raises(CryptoError, match="truncated"):
-            decrypt_file_v2(temp_file, temp_file + ".dec", TEST_PASSWORDS["VALID"])
+            decrypt_file(temp_file, temp_file + ".dec", TEST_PASSWORDS["VALID"])
+
+    def test_missing_magic_header(self, temp_file):
+        """Test handling of file without magic header."""
+        # Create a file without magic header
+        with open(temp_file, "wb") as f:
+            f.write(b"some random data without magic header")
+
+        with pytest.raises(CryptoError, match="missing magic header"):
+            decrypt_file(temp_file, temp_file + ".dec", TEST_PASSWORDS["VALID"])
