@@ -7,6 +7,7 @@ the encryption system handles all inputs correctly without crashing.
 Run with: pytest tests/fuzz/ -v --hypothesis-seed=random
 """
 
+import pytest
 from hypothesis import HealthCheck, Phase, given, settings
 from hypothesis import strategies as st
 
@@ -39,6 +40,7 @@ FUZZ_SETTINGS = settings(
 class TestEncryptionFuzz:
     """Fuzz tests for encryption input handling."""
 
+    @pytest.mark.timeout(120)  # Extended timeout for Argon2id
     @FUZZ_SETTINGS
     @given(
         plaintext=st.text(min_size=0, max_size=10000),
@@ -58,6 +60,7 @@ class TestEncryptionFuzz:
         decrypted = decrypt_text(ciphertext, passphrase)
         assert decrypted == plaintext
 
+    @pytest.mark.timeout(120)
     @FUZZ_SETTINGS
     @given(
         plaintext=st.binary(min_size=1, max_size=5000),

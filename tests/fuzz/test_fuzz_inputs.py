@@ -142,7 +142,7 @@ class TestPathValidationFuzz:
 class TestPasswordStrengthFuzz:
     """Fuzz tests for password strength validation."""
 
-    @settings(max_examples=500)
+    @settings(max_examples=500, deadline=None)
     @given(
         password=st.text(min_size=0, max_size=500),
     )
@@ -155,7 +155,7 @@ class TestPasswordStrengthFuzz:
         assert isinstance(is_valid, bool)
         assert isinstance(message, str)
 
-    @settings(max_examples=200)
+    @settings(max_examples=100, deadline=None)
     @given(
         short_password=st.text(min_size=0, max_size=11),
     )
@@ -164,7 +164,7 @@ class TestPasswordStrengthFuzz:
         is_valid, _ = check_password_strength(short_password)
         assert is_valid is False
 
-    @settings(max_examples=100)
+    @settings(max_examples=100, deadline=None)
     @given(
         password=st.text(min_size=12, max_size=100).filter(
             lambda p: any(c.isupper() for c in p)

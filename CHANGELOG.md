@@ -1,5 +1,73 @@
 # Changelog
 
+## [1.0.28] - 2025-12-02
+
+### Coverage Improvement & Test Expansion
+
+Significant expansion of test coverage from 73.84% to 79.39%, with 85 new tests targeting previously uncovered code paths.
+
+#### New Test Files
+
+- **`tests/unit/test_utils.py`** (31 tests):
+  - `CryptoError` exception handling
+  - `ProgressBar` initialization, TTY detection, throttling
+  - `detect_dark_background()` with various `COLORFGBG` values
+  - `colorize()` with color codes, NO_COLOR env, non-TTY fallback
+  - `secure_overwrite()` file deletion, permission error handling
+  - `TimeoutManager` context manager behavior
+
+- **`tests/unit/test_core_extended.py`** (14 tests):
+  - `StreamProcessor` with file-like objects
+  - `FileMetadata` dataclass fields and defaults
+  - Text encryption/decryption roundtrip
+  - Unicode text handling (emoji, CJK characters)
+  - Wrong password rejection
+  - Invalid ciphertext error handling
+  - Key commitment computation and verification
+
+- **`tests/unit/test_passphrase_manager_extended.py`** (11 tests):
+  - Custom vault path initialization
+  - `CIPHER_BACKUP_DIR` environment variable
+  - Backup rotation (keeps last 5)
+  - Nonexistent label retrieval/update/delete errors
+  - Wrong master password detection
+  - Full CRUD operations testing
+
+- **`tests/integration/test_cli_extended.py`** (29 tests):
+  - `_read_password()` visible input, echo mode, EOF handling
+  - `_print_banner()` output verification
+  - `_get_mode()` valid/invalid/empty choices
+  - `_get_input()` text and file mode prompts
+  - `_get_password()` /gen command, weak password retry, confirmation mismatch
+  - Vault operations: no vault errors, cancel handling
+  - `main()` function: exit modes, continue loop, mode handlers
+
+#### Coverage by Module
+
+| Module | Before | After | Change |
+|--------|--------|-------|--------|
+| `utils.py` | 39.19% | **100.00%** | +60.81% |
+| `cli.py` | 48.70% | 60.39% | +11.69% |
+| `passphrase_manager.py` | 79.89% | 78.26% | -1.63%* |
+| `core.py` | 82.79% | 83.09% | +0.30% |
+| **TOTAL** | **73.84%** | **79.39%** | **+5.55%** |
+
+*Minor variance due to test isolation differences
+
+#### Test Suite Growth
+
+- Total tests: 463 → **548** (+85 tests)
+- Breakdown:
+  - Unit tests: +56 (utils, core, passphrase_manager)
+  - Integration tests: +29 (CLI extended)
+
+#### Bug Fixes
+
+- Fixed fuzz test deadline issues for Argon2id operations
+- Added `pytest.mark.timeout(120)` for slow crypto operations
+- Reduced vault performance test iterations for CI stability
+- Fixed `blacklist_categories` mypy typing in fuzz tests
+
 ## [1.0.27] - 2025-12-02
 
 ### Test Suite Restructuring
