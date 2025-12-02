@@ -157,8 +157,10 @@ class TestEncryptionSecurity:
         """Verify decryption fails if ciphertext is tampered."""
         plaintext = "Secret message"
         ciphertext = encrypt_text(plaintext, "SecurePass123!")
-        # Tamper with ciphertext (somewhere in the middle)
-        tampered = ciphertext[:50] + "X" + ciphertext[51:]
+        # Tamper with multiple bytes in the ciphertext to ensure detection
+        # (single byte changes might rarely produce valid base64 with same decoded value)
+        mid = len(ciphertext) // 2
+        tampered = ciphertext[:mid] + "XXXXX" + ciphertext[mid + 5 :]
         with pytest.raises(CryptoError):
             decrypt_text(tampered, "SecurePass123!")
 
