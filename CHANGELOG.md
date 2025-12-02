@@ -1,5 +1,58 @@
 # Changelog
 
+## [1.0.29] - 2025-12-02
+
+### Documentation Overhaul
+
+Comprehensive documentation update with new API reference, improved test commands, and coverage badges.
+
+#### New Documentation
+
+- **`docs/API.md`**: Complete API reference (~600 lines) documenting:
+  - Core encryption functions (`encrypt_text`, `decrypt_text`, `encrypt_file`, `decrypt_file`)
+  - Key derivation (`derive_key`, key commitment functions)
+  - Passphrase generation and vault operations
+  - Security utilities (`check_password_strength`, `constant_time_compare`, `add_timing_jitter`)
+  - Secure memory handling (`SecureString`, `SecureBytes`, `has_secure_memory`)
+  - Rate limiting and audit logging
+  - All exceptions and utility functions
+  - Configuration constants table
+
+#### Updated Documentation
+
+- **`README.md`**:
+  - Added coverage badge (79%)
+  - Added "Quick Start" section
+  - Added comprehensive "Programmatic API" section with code examples
+  - Updated test counts (353 → 548 tests)
+  - Added `make test-quick` command for faster development
+
+- **`DEVELOPER.md`**:
+  - Updated test counts (353+ → 548 tests)
+  - Added "Fast Development Cycle" section
+  - Added `test-quick` and `test-slow` make targets
+  - Documented test timing (~10s quick vs ~80s full)
+  - Added fuzz and performance test directories
+
+- **`CONTRIBUTING.md`**:
+  - Updated coverage threshold (69% → 79%)
+  - Added "Test Commands" section with quick/full options
+  - Added complete test directory structure with all test files
+
+#### Development Improvements
+
+- **Makefile**: Enhanced test targets
+  - `make test-quick`: Fast tests (~10s, 207 tests) - excludes KDF-heavy tests
+  - `make test-slow`: Run only slow tests (KDF, fuzz, performance)
+  - Better developer experience for rapid iteration
+
+#### Test Suite Summary
+
+- Total tests: **548**
+- Quick tests: 207 (~10s)
+- Slow tests: 341 (~70s)
+- Coverage: 79.39%
+
 ## [1.0.28] - 2025-12-02
 
 ### Coverage Improvement & Test Expansion
@@ -76,7 +129,7 @@ Major reorganization of the test suite into specialized directories for better m
 
 #### New Test Directory Structure
 
-```
+```text
 tests/
 ├── unit/           # Core functionality tests
 ├── integration/    # End-to-end workflow tests
@@ -332,6 +385,7 @@ logger.log(AuditEvent.AUTH_FAILURE, success=False, details={"reason": "wrong pas
 #### Configuration Constants
 
 New settings in `config.py`:
+
 - `RATE_LIMIT_MAX_ATTEMPTS = 5` - Maximum failed attempts before lockout
 - `RATE_LIMIT_WINDOW_SECONDS = 60` - Time window for tracking attempts
 - `RATE_LIMIT_LOCKOUT_SECONDS = 30` - Initial lockout duration
@@ -368,7 +422,8 @@ This release completes the security audit recommendations with enhanced key prot
 - **Argon2id for Vault HMAC**: The passphrase vault now uses Argon2id (instead of SHA-256) to derive HMAC keys for integrity verification. Each vault has a unique random 32-byte salt, providing memory-hard protection against brute-force attacks on vault integrity.
 
 - **New Vault Format**: Vault files now use the `SSCVAULT` header with random HMAC salt:
-  ```
+
+  ```text
   SSCVAULT
   <hmac_salt_hex>
   ---DATA---
@@ -376,6 +431,7 @@ This release completes the security audit recommendations with enhanced key prot
   ---HMAC---
   <argon2id_derived_hmac>
   ```
+
   **Breaking Change**: Vaults from previous versions are not compatible. Back up and re-create vaults after upgrading.
 
 #### User Experience
@@ -384,14 +440,14 @@ This release completes the security audit recommendations with enhanced key prot
 
 - **Documentation Updates**: README and DEVELOPER.md updated to explain password input behavior and testing patterns.
 
-#### Technical Details
+#### Implementation Details
 
 - `_read_password()` helper with `sys.stdin.isatty()` detection
 - `_compute_hmac()` now takes salt parameter for Argon2id derivation
 - Removed legacy v1 vault loading code (clean single-format implementation)
 - Memory limitation documentation in `secure_memory.py`
 
-#### Tests
+#### Test Results
 
 - 353 tests passing
 - All existing tests work unchanged (StringIO triggers visible input mode)
@@ -435,7 +491,7 @@ Development release that removes all legacy encryption code, establishing a clea
 - Key commitment: HMAC-SHA256 prevents invisible salamanders attacks
 - File format: MAGIC(5) + META_LEN(2) + META_JSON + SALT(16) + NONCE(12) + CIPHERTEXT + TAG(16)
 
-#### Tests
+#### Test Summary
 
 - 353 tests total (expanded with secure memory and timing tests)
 - Rewrote `test_core.py`, `test_kdf.py` for Argon2id-only
@@ -583,10 +639,12 @@ This release introduces a major enhancement: encrypted files can now store and r
 ## [1.0.17] - 2025-11-17
 
 ### Added
+
 - CLI auto-store prompt now ships in a public release. Whenever you generate a passphrase (option 5 or `/gen`), you can immediately encrypt it into the vault without leaving the workflow.
 - README now documents the full vault flow (options 5-9), highlights the integrity safeguards, and explains how to upgrade/verify that this build is installed.
 
 ### Details
+
 - **Testing Improvements**:
   - Added focused CLI unit tests to verify the inline "save to vault" workflow.
   - Hardened the secure temp file test so it reliably simulates unwritable directories even when the suite runs as root.
@@ -652,14 +710,16 @@ This release introduces a major enhancement: encrypted files can now store and r
 
 ## [1.0.16] - 2025-11-16
 
-### Breaking Changes
+### Breaking Changes (Python Version)
+
 - **Python 3.12+ Required**: Dropped support for Python 3.10 and 3.11
   - Minimum version is now Python 3.12
   - CI/CD only tests 3.12, 3.13, and 3.14
   - Follows Python's official support timeline (3.10 EOL Oct 2026, 3.11 EOL Oct 2027)
   - Allows use of modern Python features and improved type hints
 
-### Added
+### New Features
+
 - **Inline Passphrase Generation**:
   - Type `/gen`, `/generate`, or `/g` at any password prompt to instantly generate a strong passphrase
   - Seamless workflow with no need to exit encryption flow
@@ -669,6 +729,7 @@ This release introduces a major enhancement: encrypted files can now store and r
   - Comprehensive integration tests covering all scenarios
 
 ### Fixed
+
 - **Python 3.12 Compatibility**: Fixed `secure_atomic_write()` filesystem permission handling
   - Changed exception handling from `PermissionError` to `OSError` for `Path.exists()` calls
   - Prevents test failures on Python 3.12 when checking file existence in restricted directories
@@ -676,6 +737,7 @@ This release introduces a major enhancement: encrypted files can now store and r
   - Test suite: 210 tests pass across Python 3.12-3.14
 
 ### Changed
+
 - Updated Python version classifiers in package metadata
 - Streamlined CI/CD to test only supported Python versions
 - Removed Python 3.10-specific test workarounds

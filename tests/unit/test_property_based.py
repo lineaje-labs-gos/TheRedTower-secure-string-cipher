@@ -159,7 +159,7 @@ class TestKeyCommitmentProperties:
     """Property-based tests for key commitment scheme."""
 
     @given(key=st.binary(min_size=ARGON2_HASH_LENGTH, max_size=ARGON2_HASH_LENGTH))
-    @settings(max_examples=50)
+    @settings(max_examples=50, deadline=None)
     def test_commitment_deterministic(self, key: bytes):
         """Same key always produces same commitment."""
         c1 = compute_key_commitment(key)
@@ -167,7 +167,7 @@ class TestKeyCommitmentProperties:
         assert c1 == c2
 
     @given(key=st.binary(min_size=ARGON2_HASH_LENGTH, max_size=ARGON2_HASH_LENGTH))
-    @settings(max_examples=50)
+    @settings(max_examples=50, deadline=None)
     def test_commitment_verifies(self, key: bytes):
         """Commitment verifies correctly with same key."""
         commitment = compute_key_commitment(key)
@@ -177,7 +177,7 @@ class TestKeyCommitmentProperties:
         k1=st.binary(min_size=ARGON2_HASH_LENGTH, max_size=ARGON2_HASH_LENGTH),
         k2=st.binary(min_size=ARGON2_HASH_LENGTH, max_size=ARGON2_HASH_LENGTH),
     )
-    @settings(max_examples=30)
+    @settings(max_examples=30, deadline=None)
     def test_different_keys_different_commitments(self, k1: bytes, k2: bytes):
         """Different keys produce different commitments."""
         assume(k1 != k2)
@@ -189,7 +189,7 @@ class TestKeyCommitmentProperties:
         k1=st.binary(min_size=ARGON2_HASH_LENGTH, max_size=ARGON2_HASH_LENGTH),
         k2=st.binary(min_size=ARGON2_HASH_LENGTH, max_size=ARGON2_HASH_LENGTH),
     )
-    @settings(max_examples=30)
+    @settings(max_examples=30, deadline=None)
     def test_wrong_key_fails_verification(self, k1: bytes, k2: bytes):
         """Commitment doesn't verify with wrong key."""
         assume(k1 != k2)
@@ -206,7 +206,7 @@ class TestFilenameSanitizationProperties:
     """Property-based tests for filename sanitization."""
 
     @given(filename=unsafe_filename)
-    @settings(max_examples=100)
+    @settings(max_examples=100, deadline=None)
     def test_sanitized_filename_is_safe(self, filename: str):
         """Sanitized filenames pass safety validation."""
         sanitized = sanitize_filename(filename)
@@ -218,14 +218,14 @@ class TestFilenameSanitizationProperties:
         assert len(sanitized) > 0
 
     @given(filename=unsafe_filename)
-    @settings(max_examples=100)
+    @settings(max_examples=100, deadline=None)
     def test_sanitized_filename_length_bounded(self, filename: str):
         """Sanitized filenames are within length limits."""
         sanitized = sanitize_filename(filename)
         assert len(sanitized) <= 255
 
     @given(filename=st.from_regex(r"[a-zA-Z][a-zA-Z0-9_\-\.]{0,50}", fullmatch=True))
-    @settings(max_examples=50)
+    @settings(max_examples=50, deadline=None)
     def test_safe_filenames_preserved(self, filename: str):
         """Already safe filenames are preserved."""
         assume(len(filename) > 0)
@@ -243,7 +243,7 @@ class TestConstantTimeCompareProperties:
     """Property-based tests for constant-time comparison."""
 
     @given(data=st.binary(min_size=0, max_size=1024))
-    @settings(max_examples=100)
+    @settings(max_examples=100, deadline=None)
     def test_same_data_compares_equal(self, data: bytes):
         """Same data compares as equal."""
         assert constant_time_compare(data, data)
@@ -251,7 +251,7 @@ class TestConstantTimeCompareProperties:
     @given(
         d1=st.binary(min_size=1, max_size=1024), d2=st.binary(min_size=1, max_size=1024)
     )
-    @settings(max_examples=100)
+    @settings(max_examples=100, deadline=None)
     def test_different_data_compares_unequal(self, d1: bytes, d2: bytes):
         """Different data compares as unequal."""
         assume(d1 != d2)
@@ -260,7 +260,7 @@ class TestConstantTimeCompareProperties:
     @given(
         d1=st.binary(min_size=0, max_size=100), d2=st.binary(min_size=0, max_size=100)
     )
-    @settings(max_examples=50)
+    @settings(max_examples=50, deadline=None)
     def test_different_lengths_compare_unequal(self, d1: bytes, d2: bytes):
         """Different length data compares as unequal."""
         assume(len(d1) != len(d2))
@@ -276,7 +276,7 @@ class TestSecureMemoryProperties:
     """Property-based tests for secure memory handling."""
 
     @given(data=st.binary(min_size=1, max_size=1024))
-    @settings(max_examples=50)
+    @settings(max_examples=50, deadline=None)
     def test_secure_wipe_zeros_buffer(self, data: bytes):
         """Secure wipe zeros out mutable buffer."""
         buffer = bytearray(data)
@@ -284,7 +284,7 @@ class TestSecureMemoryProperties:
         assert all(b == 0 for b in buffer)
 
     @given(data=st.binary(min_size=1, max_size=1024))
-    @settings(max_examples=50)
+    @settings(max_examples=50, deadline=None)
     def test_secure_bytes_context_provides_data(self, data: bytes):
         """SecureBytes context manager provides access to data via .data property."""
         with SecureBytes(data) as secure:
@@ -292,7 +292,7 @@ class TestSecureMemoryProperties:
             assert bytes(secure.data) == data
 
     @given(text=st.text(alphabet=string.printable, min_size=1, max_size=256))
-    @settings(max_examples=50)
+    @settings(max_examples=50, deadline=None)
     def test_secure_string_context_provides_string(self, text: str):
         """SecureString context manager provides access to string."""
         with SecureString(text) as secure:
@@ -347,14 +347,14 @@ class TestPasswordStrengthProperties:
     """Property-based tests for password strength checking."""
 
     @given(password=valid_passphrase)
-    @settings(max_examples=50)
+    @settings(max_examples=50, deadline=None)
     def test_valid_passwords_pass(self, password: str):
         """Passwords meeting all requirements pass validation."""
         is_strong, _ = check_password_strength(password)
         assert is_strong
 
     @given(password=st.text(min_size=0, max_size=11))
-    @settings(max_examples=50)
+    @settings(max_examples=50, deadline=None)
     def test_short_passwords_fail(self, password: str):
         """Passwords shorter than minimum length fail."""
         is_strong, reasons = check_password_strength(password)

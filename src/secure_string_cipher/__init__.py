@@ -36,7 +36,7 @@ from .timing_safe import (
 )
 from .utils import ProgressBar, colorize, handle_timeout, secure_overwrite
 
-__version__ = "1.0.28"
+__version__ = "1.0.29"
 __author__ = "TheRedTower"
 __email__ = "security@avondenecloud.uk"
 

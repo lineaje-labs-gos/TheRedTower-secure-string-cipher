@@ -48,9 +48,13 @@ test-security:  ## Run only security tests
 	@echo "🔒 Running security tests..."
 	pytest -m security -v
 
-test-quick:  ## Run tests excluding slow ones
-	@echo "⚡ Running quick tests..."
-	pytest -m "not slow" -v
+test-quick:  ## Run fast tests only (~10s vs ~80s) - skips KDF/fuzz/perf
+	@echo "⚡ Running quick tests (no KDF-heavy tests)..."
+	pytest tests/unit/ tests/integration/ -q --ignore=tests/unit/test_kdf.py --ignore=tests/unit/test_core_extended.py --ignore=tests/unit/test_passphrase_manager_extended.py --ignore=tests/integration/test_passphrase_manager.py --ignore=tests/integration/test_cli_workflows.py -x
+
+test-slow:  ## Run slow tests only (KDF, fuzz, performance)
+	@echo "🐢 Running slow tests (KDF, fuzz, performance)..."
+	pytest tests/unit/test_kdf.py tests/unit/test_core_extended.py tests/unit/test_passphrase_manager_extended.py tests/fuzz/ tests/performance/ tests/integration/test_passphrase_manager.py -v
 
 test-failed:  ## Re-run only failed tests
 	@echo "🔄 Re-running failed tests..."

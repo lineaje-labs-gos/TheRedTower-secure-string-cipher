@@ -1,6 +1,7 @@
 # secure-string-cipher
 
 [![CI](https://github.com/TheRedTower/secure-string-cipher/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/TheRedTower/secure-string-cipher/actions/workflows/ci.yml)
+[![Coverage](https://img.shields.io/badge/coverage-79%25-green.svg)](https://github.com/TheRedTower/secure-string-cipher)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python](https://img.shields.io/badge/Python-3.12+-blue.svg)](https://www.python.org/downloads/)
 
@@ -18,6 +19,16 @@ A security-focused AES-256-GCM encryption CLI tool with passphrase vault and mod
 - **Timing-safe operations** – constant-time comparisons prevent side-channel attacks
 - Chunked file streaming (64KB) for low memory usage
 - Automatic vault backups (last 5 kept)
+
+## Quick Start
+
+```bash
+# Install
+pip install secure-string-cipher
+
+# Run interactive CLI
+cipher-start
+```
 
 ## Installation
 
@@ -46,7 +57,7 @@ cipher-start
 
 You'll see this menu:
 
-```
+```text
 ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
 ┃                       AVAILABLE OPERATIONS                     ┃
 ┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┫
@@ -79,7 +90,7 @@ Choose an option and follow the prompts.
 
 When prompted for a password during encryption, you can type `/gen` (or `/generate` or `/g`) to instantly generate a strong passphrase:
 
-```
+```text
 Enter passphrase: /gen
 
 🔑 Auto-Generating Secure Passphrase...
@@ -145,6 +156,95 @@ docker run --rm -it \
 
 **Image details:** ~65MB Alpine-based, runs as non-root (UID 1000), network-isolated.
 
+## Programmatic API
+
+Use secure-string-cipher as a library in your Python projects:
+
+### Text Encryption
+
+```python
+from secure_string_cipher import encrypt_string, decrypt_string
+
+# Encrypt a message
+ciphertext = encrypt_string("Secret message", "MySecurePass123!")
+print(ciphertext)  # Base64-encoded string
+
+# Decrypt it back
+plaintext = decrypt_string(ciphertext, "MySecurePass123!")
+print(plaintext)  # "Secret message"
+```
+
+### File Encryption
+
+```python
+from secure_string_cipher import encrypt_file, decrypt_file
+
+# Encrypt a file (creates file.txt.enc)
+encrypt_file("document.pdf", "MySecurePass123!")
+
+# Decrypt it (creates document.pdf from document.pdf.enc)
+decrypt_file("document.pdf.enc", "MySecurePass123!")
+```
+
+### Passphrase Generation
+
+```python
+from secure_string_cipher import generate_passphrase
+
+# Generate a 24-character passphrase (155+ bits entropy)
+passphrase = generate_passphrase(length=24)
+print(passphrase)  # e.g., "8w@!-@_#M)wF,Qn(ms.Uv+3z"
+
+# Calculate entropy
+from secure_string_cipher import calculate_entropy
+bits = calculate_entropy(passphrase)
+print(f"Entropy: {bits:.1f} bits")
+```
+
+### Vault Operations
+
+```python
+from secure_string_cipher import PassphraseVault
+
+# Create or open vault
+vault = PassphraseVault()
+
+# Store a passphrase
+vault.store("my-server", "MySecurePass123!", master_password="VaultMaster456!")  # pragma: allowlist secret
+
+# Retrieve it
+password = vault.retrieve("my-server", master_password="VaultMaster456!")  # pragma: allowlist secret
+
+# List all labels
+labels = vault.list_labels()
+
+# Delete an entry
+vault.delete("my-server", master_password="VaultMaster456!")  # pragma: allowlist secret
+```
+
+### Security Utilities
+
+```python
+from secure_string_cipher import (
+    check_password_strength,
+    constant_time_compare,
+    has_secure_memory,
+)
+
+# Validate password strength
+is_strong, issues = check_password_strength("weak")
+if not is_strong:
+    print(f"Password issues: {issues}")
+
+# Constant-time comparison (prevents timing attacks)
+if constant_time_compare(user_input, stored_hash):
+    print("Match!")
+
+# Check if libsodium secure memory is available
+if has_secure_memory():
+    print("Using libsodium for secure memory zeroing")
+```
+
 ## Security
 
 | Component | Implementation | Details |
@@ -169,8 +269,9 @@ git clone https://github.com/TheRedTower/secure-string-cipher.git
 cd secure-string-cipher
 pip install -e ".[dev]"
 
-make format   # Auto-format with Ruff
-make ci       # Run full CI pipeline (lint + type check + 353 tests)
+make format      # Auto-format with Ruff
+make test-quick  # Fast tests (~10s, 207 tests)
+make ci          # Full CI pipeline (lint + type check + 548 tests)
 ```
 
 See [DEVELOPER.md](DEVELOPER.md) for detailed development workflow and [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidelines.

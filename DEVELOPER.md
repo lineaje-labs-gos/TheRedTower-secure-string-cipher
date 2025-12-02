@@ -21,32 +21,51 @@ make ci        # Run full CI pipeline locally
 ### Commands
 
 ```bash
-make help      # List all commands
-make format    # Auto-format with Ruff
-make lint      # Check style, types, and code quality
-make test      # Run test suite
-make test-cov  # Run tests with coverage
-make clean     # Remove temporary files
-make ci        # Run complete CI checks
+make help         # List all commands
+make format       # Auto-format with Ruff
+make lint         # Check style, types, and code quality
+make test         # Run full test suite (548 tests, ~80s)
+make test-quick   # Run fast tests only (207 tests, ~10s)
+make test-slow    # Run KDF/fuzz/performance tests
+make test-cov     # Run tests with coverage
+make clean        # Remove temporary files
+make ci           # Run complete CI checks
+```
+
+### Fast Development Cycle
+
+For rapid iteration, use `test-quick` which skips crypto-heavy tests:
+
+```bash
+# Quick feedback loop (~10s vs ~80s)
+make test-quick
+
+# Run full suite before commit
+make ci
 ```
 
 ## Tools
 
 ### Ruff (Linter + Formatter)
+
 - Replaces Black, isort, flake8, and more
 - 10-100x faster than Black
 - Formats code, sorts imports, catches bugs
 - Config in `pyproject.toml` under `[tool.ruff]`
 
 ### mypy (Type Checker)
+
 - Catches type errors before runtime
 - Checks arguments, return types, None handling
 - Config in `pyproject.toml` under `[tool.mypy]`
 
 ### pytest (Testing)
-- Runs automated tests (353+ tests)
+
+- Runs automated tests (548 tests)
 - Unit tests in `tests/unit/`, integration tests in `tests/integration/`
-- Markers: `@pytest.mark.unit`, `@pytest.mark.integration`, `@pytest.mark.security`
+- Security tests in `tests/security/`, fuzz tests in `tests/fuzz/`
+- Performance benchmarks in `tests/performance/`
+- Markers: `@pytest.mark.unit`, `@pytest.mark.integration`, `@pytest.mark.security`, `@pytest.mark.slow`
 - Run with `pytest tests/` or `make test`
 
 ## CI/CD
@@ -66,6 +85,7 @@ GitHub Actions runs a two-stage pipeline:
 ## Common Tasks
 
 ### Adding a Feature
+
 ```bash
 # Create a branch
 git checkout -b feature/my-feature
@@ -81,6 +101,7 @@ git push origin feature/my-feature
 ```
 
 ### Fix Formatting
+
 ```bash
 # Auto-fix everything
 make format
@@ -88,7 +109,9 @@ make format
 # Check without modifying
 ruff format --check src tests
 ```
+
 ### Run Specific Tests
+
 ```bash
 # One test file
 pytest tests/unit/test_security.py
@@ -102,11 +125,16 @@ pytest tests/unit/test_security.py::TestFilenameSanitization::test_safe_filename
 # By marker
 pytest -m security
 pytest -m "unit and not slow"
+
+# Quick vs full
+make test-quick   # Fast tests only (~10s)
+make test         # Full suite (~80s)
 ```
 
 ### Testing Password Input
 
 The CLI uses automatic mode detection for password input:
+
 - **Interactive terminal** (`sys.stdin.isatty()` = True): Hidden input via `getpass`
 - **Piped/redirected stdin** (tests, scripts): Visible input via `readline`
 
@@ -123,6 +151,7 @@ run_menu(in_stream, out_stream)
 ```
 
 ### Debug CI Failures
+
 ```bash
 # Run what CI runs
 make ci
@@ -140,6 +169,7 @@ pytest tests/ -v
 ## Releases
 
 ### Version Bump
+
 1. Update version in `pyproject.toml`
 2. Update `CHANGELOG.md`
 3. Commit: `git commit -m "chore: bump version to X.Y.Z"`
@@ -147,6 +177,7 @@ pytest tests/ -v
 5. Push: `git push origin main --tags`
 
 ### Publishing to PyPI
+
 ```bash
 # Build
 python -m build
@@ -165,6 +196,7 @@ python -m twine upload dist/*
 ## Troubleshooting
 
 ### Ruff Errors
+
 ```bash
 # See problems
 ruff check src tests
@@ -177,6 +209,7 @@ ruff check --fix --unsafe-fixes src tests
 ```
 
 ### Test Failures
+
 ```bash
 # Verbose output
 pytest tests/ -v
@@ -189,6 +222,7 @@ pytest tests/ -x
 ```
 
 ### Type Errors
+
 ```bash
 # Check types
 mypy src tests

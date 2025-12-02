@@ -18,7 +18,7 @@ This project follows a Code of Conduct adapted from the Contributor Covenant. By
 
 ### Reporting Bugs
 
-* **Security issues** - Please report these privately to security@avondenecloud.uk
+* **Security issues** - Please report these privately to <security@avondenecloud.uk>
 * **Regular bugs** - Use the GitHub issue tracker
 * Include steps to reproduce, your OS, Python version, and any relevant logs
 
@@ -65,10 +65,46 @@ See [DEVELOPER.md](DEVELOPER.md) for detailed workflow, troubleshooting, and rel
 ## Testing
 
 * Write tests for new features
-* Maintain coverage above 69% threshold
+* Maintain coverage above 79% threshold (current: 79.39%)
 * Include positive and negative test cases
 * Test edge cases and error conditions
 * Use parameterized tests when appropriate
+
+### Test Commands
+
+```bash
+make test-quick   # Fast tests (~10s) - for development iteration
+make test         # Full suite (548 tests, ~80s)
+make test-cov     # Full suite with coverage report
+```
+
+### Test Structure
+
+```text
+tests/
+├── conftest.py          # Shared fixtures
+├── factories.py         # Test data factories
+├── helpers.py           # Test utilities
+├── unit/                # Unit tests (fast, isolated)
+│   ├── test_core.py
+│   ├── test_core_extended.py
+│   ├── test_security.py
+│   ├── test_timing_safe.py
+│   ├── test_passphrase_generator.py
+│   ├── test_passphrase_manager_extended.py
+│   ├── test_secure_memory.py
+│   ├── test_cli_menu.py
+│   └── test_utils.py
+├── integration/         # Integration tests (CLI workflows)
+│   ├── test_cli.py
+│   ├── test_cli_workflows.py
+│   ├── test_cli_extended.py
+│   ├── test_passphrase_manager.py
+│   └── test_inline_passphrase_gen.py
+├── security/            # Security-focused tests
+├── fuzz/                # Hypothesis fuzzing tests
+└── performance/         # Benchmark tests
+```
 
 ## Documentation
 
@@ -89,7 +125,7 @@ See [DEVELOPER.md](DEVELOPER.md) for detailed workflow, troubleshooting, and rel
 
 ## Project Structure
 
-```
+```text
 secure-string-cipher/
 ├── src/
 │   └── secure_string_cipher/
