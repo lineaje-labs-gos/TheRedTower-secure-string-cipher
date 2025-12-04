@@ -35,7 +35,7 @@ We take security bugs seriously. Thanks for helping us keep this project secure.
    - Fill out the private form
 
 2. **Email**
-   - Send to: **security@avondenecloud.uk**
+   - Send to: **<security@avondenecloud.uk>**
    - Don't create a public GitHub issue for vulnerabilities
 
 ### What to Include
@@ -139,16 +139,18 @@ When contributing:
 ### Installing Safely
 
 1. **Install from the official source**
+
    ```bash
    pip install secure-string-cipher
    ```
 
 2. **Verify the package**
-   - Official PyPI: https://pypi.org/project/secure-string-cipher/
+   - Official PyPI: <https://pypi.org/project/secure-string-cipher/>
    - Maintainer: TheRedTower
-   - Source code: https://github.com/TheRedTower/secure-string-cipher
+   - Source code: <https://github.com/TheRedTower/secure-string-cipher>
 
 3. **Check dependencies**
+
    ```bash
    pip show secure-string-cipher
    ```
@@ -228,8 +230,8 @@ This project maintains audit documentation for third-party security reviews:
 
 ## Contact
 
-- **Security issues:** security@avondenecloud.uk
-- **GitHub Security Advisories:** https://github.com/TheRedTower/secure-string-cipher/security/advisories
+- **Security issues:** <security@avondenecloud.uk>
+- **GitHub Security Advisories:** <https://github.com/TheRedTower/secure-string-cipher/security/advisories>
 - **General support:** Open a GitHub issue (non-security only)
 
 ---

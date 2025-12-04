@@ -1,5 +1,68 @@
 # Changelog
 
+## [1.0.30] - 2025-12-02
+
+### Non-Interactive CLI Mode
+
+Major feature release introducing the `ssc` command for scripting and automation.
+
+#### New CLI Entry Point
+
+- **`ssc` Command**: Non-interactive CLI with subcommands:
+  - `ssc start` - Launch interactive menu (replaces `cipher-start`)
+  - `ssc encrypt -t "msg"` / `ssc encrypt -f file` - Encrypt text or files
+  - `ssc decrypt -t "cipher"` / `ssc decrypt -f file.enc` - Decrypt text or files
+  - `ssc store <label>` / `ssc store <label> -g` - Store manual or generated password
+  - `ssc vault list|delete|export|import|reset` - Full vault management
+
+#### Security Design
+
+- **No Command-Line Passwords**: Passwords never appear in command line arguments,
+  preventing shell history exposure. All passwords prompted interactively or retrieved from vault.
+- **Vault Integration**: Use `--vault <LABEL>` with any encrypt/decrypt command to pull
+  password from the encrypted vault automatically.
+- **Validation First**: File existence and overwrite checks happen before password prompts,
+  preventing password exposure on validation failures.
+
+#### User Experience
+
+- **Exit Codes**: Consistent error codes for scripting:
+  - 0: Success
+  - 1: Input error (invalid arguments)
+  - 2: Auth error (wrong password)
+  - 3: Vault error (not initialized, label not found)
+  - 4: File error (not found, permission denied)
+
+- **Output Control**:
+  - `--quiet / -q` - Suppress info/warning messages
+  - `--no-color` - Disable ANSI color codes
+  - Text output to stdout, status to stderr
+
+- **Overwrite Protection**: Encrypted files refuse to overwrite existing outputs
+  unless `--force` is specified.
+
+#### New Module
+
+- **`src/secure_string_cipher/cli_args.py`**: 730+ lines implementing:
+  - Argparse-based subcommand structure
+  - Password prompting with confirmation
+  - Vault auto-initialization on first use
+  - Full error handling with user-friendly messages
+
+#### Entry Points
+
+- `ssc` → `secure_string_cipher.cli_args:main` (NEW)
+- `cipher-start` → `secure_string_cipher.cli:main` (unchanged)
+
+#### Test Suite (v1.0.30)
+
+- **New tests**: 67 tests covering the new CLI
+  - `tests/unit/test_cli_args.py`: Parser, validation, command tests (45 tests)
+  - `tests/integration/test_ssc_cli.py`: End-to-end CLI workflows (22 tests)
+- **Total**: 615 tests (548 → 615, +67 new tests)
+
+---
+
 ## [1.0.29] - 2025-12-02
 
 ### Documentation Overhaul
@@ -434,7 +497,7 @@ This release completes the security audit recommendations with enhanced key prot
 
   **Breaking Change**: Vaults from previous versions are not compatible. Back up and re-create vaults after upgrading.
 
-#### User Experience
+#### User Experience (v1.0.17)
 
 - **Hidden Password Input**: Passwords are now hidden when typing in interactive terminals (via `getpass`). When stdin is piped or redirected (scripts, tests, automation), visible input is used automatically. No configuration needed.
 
