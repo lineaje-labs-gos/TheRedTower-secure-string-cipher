@@ -225,8 +225,8 @@ pipdeptree -p secure-string-cipher
 
 This project maintains audit documentation for third-party security reviews:
 
-- **[CRYPTOGRAPHY.md](CRYPTOGRAPHY.md)** - Detailed cryptographic design and threat model
-- **[AUDIT_CHECKLIST.md](AUDIT_CHECKLIST.md)** - Checklist for security auditors
+- **[CRYPTOGRAPHY.md](.github/CRYPTOGRAPHY.md)** - Detailed cryptographic design and threat model
+- **[AUDIT_CHECKLIST.md](.github/AUDIT_CHECKLIST.md)** - Checklist for security auditors
 
 ## Contact
 
@@ -236,5 +236,5 @@ This project maintains audit documentation for third-party security reviews:
 
 ---
 
-**Last updated:** December 2, 2025
-**Version:** 2.0
+**Last updated:** December 5, 2025
+**Version:** 2.1
