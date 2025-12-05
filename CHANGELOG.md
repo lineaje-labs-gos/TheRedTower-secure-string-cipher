@@ -1,19 +1,20 @@
 # Changelog
 
-## [1.0.30] - 2025-12-02
+## [1.0.30] - 2025-12-05
 
 ### Non-Interactive CLI Mode
 
 Major feature release introducing the `ssc` command for scripting and automation.
 
-#### New CLI Entry Point
+#### New CLI Entry Points
 
 - **`ssc` Command**: Non-interactive CLI with subcommands:
-  - `ssc start` - Launch interactive menu (replaces `cipher-start`)
   - `ssc encrypt -t "msg"` / `ssc encrypt -f file` - Encrypt text or files
   - `ssc decrypt -t "cipher"` / `ssc decrypt -f file.enc` - Decrypt text or files
   - `ssc store <label>` / `ssc store <label> -g` - Store manual or generated password
   - `ssc vault list|delete|export|import|reset` - Full vault management
+
+- **`ssc-start` Command**: Launch interactive menu (renamed from `cipher-start`)
 
 #### Security Design
 
@@ -52,7 +53,14 @@ Major feature release introducing the `ssc` command for scripting and automation
 #### Entry Points
 
 - `ssc` → `secure_string_cipher.cli_args:main` (NEW)
-- `cipher-start` → `secure_string_cipher.cli:main` (unchanged)
+- `ssc-start` → `secure_string_cipher.cli:main` (renamed from `cipher-start`)
+
+#### Post-Release Fixes
+
+- Fixed PassphraseVault method names in CLI (`store_passphrase`, `delete_passphrase`, etc.)
+- Fixed timing test tolerance for CI environments (shared runner CPU variance)
+- Updated documentation with `ssc` CLI usage examples
+- Removed `copilot-instructions.md` from git tracking (local-only)
 
 #### Test Suite (v1.0.30)
 

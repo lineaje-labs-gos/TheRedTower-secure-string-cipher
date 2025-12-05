@@ -27,7 +27,10 @@ A security-focused AES-256-GCM encryption CLI tool with passphrase vault and mod
 pip install secure-string-cipher
 
 # Run interactive CLI
-cipher-start
+ssc-start
+
+# Or use non-interactive CLI
+ssc --help
 ```
 
 ## Installation
@@ -80,12 +83,12 @@ ssc vault import backup.json
 
 **Security:** Passwords are never passed via command line arguments (prevents shell history exposure). All passwords are prompted interactively or retrieved from the vault.
 
-### Interactive CLI (`cipher-start`)
+### Interactive CLI (`ssc-start`)
 
 For interactive use, run:
 
 ```bash
-cipher-start
+ssc-start
 ```
 
 You'll see this menu:
@@ -243,16 +246,16 @@ from secure_string_cipher import PassphraseVault
 vault = PassphraseVault()
 
 # Store a passphrase
-vault.store("my-server", "MySecurePass123!", master_password="VaultMaster456!")  
+vault.store("my-server", "MySecurePass123!", master_password="VaultMaster456!")  # pragma: allowlist secret
 
 # Retrieve it
-password = vault.retrieve("my-server", master_password="VaultMaster456!")
+password = vault.retrieve("my-server", master_password="VaultMaster456!")  # pragma: allowlist secret
 
 # List all labels
 labels = vault.list_labels()
 
 # Delete an entry
-vault.delete("my-server", master_password="VaultMaster456!")
+vault.delete("my-server", master_password="VaultMaster456!")  # pragma: allowlist secret
 ```
 
 ### Security Utilities
