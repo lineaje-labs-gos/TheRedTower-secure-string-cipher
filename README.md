@@ -49,7 +49,40 @@ pip install .
 
 ## Usage
 
-Run the interactive CLI:
+### Non-Interactive CLI (`ssc`)
+
+For scripting and automation, use the `ssc` command:
+
+```bash
+# Encrypt text
+ssc encrypt -t "Secret message"
+
+# Encrypt a file
+ssc encrypt -f document.pdf
+
+# Decrypt using vault password
+ssc decrypt -f document.pdf.enc --vault my-server
+
+# Store a password in vault
+ssc store my-server
+
+# Auto-generate and store a password
+ssc store backup-key --generate
+
+# Vault management
+ssc vault list
+ssc vault delete old-key
+ssc vault export backup.json
+ssc vault import backup.json
+```
+
+**Exit codes:** 0=success, 1=input error, 2=auth error, 3=vault error, 4=file error
+
+**Security:** Passwords are never passed via command line arguments (prevents shell history exposure). All passwords are prompted interactively or retrieved from the vault.
+
+### Interactive CLI (`cipher-start`)
+
+For interactive use, run:
 
 ```bash
 cipher-start
@@ -271,7 +304,7 @@ pip install -e ".[dev]"
 
 make format      # Auto-format with Ruff
 make test-quick  # Fast tests (~10s, 207 tests)
-make ci          # Full CI pipeline (lint + type check + 548 tests)
+make ci          # Full CI pipeline (lint + type check + 615 tests)
 ```
 
 See [DEVELOPER.md](DEVELOPER.md) for detailed development workflow and [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidelines.

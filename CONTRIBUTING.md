@@ -74,7 +74,7 @@ See [DEVELOPER.md](DEVELOPER.md) for detailed workflow, troubleshooting, and rel
 
 ```bash
 make test-quick   # Fast tests (~10s) - for development iteration
-make test         # Full suite (548 tests, ~80s)
+make test         # Full suite (615 tests, ~80s)
 make test-cov     # Full suite with coverage report
 ```
 

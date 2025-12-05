@@ -24,7 +24,7 @@ make ci        # Run full CI pipeline locally
 make help         # List all commands
 make format       # Auto-format with Ruff
 make lint         # Check style, types, and code quality
-make test         # Run full test suite (548 tests, ~80s)
+make test         # Run full test suite (615 tests, ~80s)
 make test-quick   # Run fast tests only (207 tests, ~10s)
 make test-slow    # Run KDF/fuzz/performance tests
 make test-cov     # Run tests with coverage
@@ -61,7 +61,7 @@ make ci
 
 ### pytest (Testing)
 
-- Runs automated tests (548 tests)
+- Runs automated tests (615 tests)
 - Unit tests in `tests/unit/`, integration tests in `tests/integration/`
 - Security tests in `tests/security/`, fuzz tests in `tests/fuzz/`
 - Performance benchmarks in `tests/performance/`
@@ -149,6 +149,33 @@ in_stream = StringIO("1\nmy message\nMySecurePass123!\nMySecurePass123!\n0\n")
 out_stream = StringIO()
 run_menu(in_stream, out_stream)
 ```
+
+### Testing the Non-Interactive CLI (`ssc`)
+
+The `ssc` command is designed for scripting and automation. Test with subprocess:
+
+```python
+import subprocess
+
+# Test encryption with password prompt
+result = subprocess.run(
+    ["ssc", "encrypt", "-t", "secret message"],
+    input="MySecurePass123!\nMySecurePass123!\n",
+    capture_output=True,
+    text=True
+)
+assert result.returncode == 0
+
+# Test with vault password
+result = subprocess.run(
+    ["ssc", "decrypt", "-f", "file.enc", "--vault", "my-label"],
+    input="VaultMaster456!\n",
+    capture_output=True,
+    text=True
+)
+```
+
+Exit codes: 0=success, 1=input error, 2=auth error, 3=vault error, 4=file error
 
 ### Debug CI Failures
 
