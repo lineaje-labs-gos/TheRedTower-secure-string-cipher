@@ -211,7 +211,7 @@ File encryption uses a structured format with metadata:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│ MAGIC (5 bytes): "SSCV4"                                    │
+│ MAGIC (5 bytes): "SSCV2"                                    │
 ├─────────────────────────────────────────────────────────────┤
 │ METADATA_LENGTH (2 bytes): Big-endian uint16                │
 ├─────────────────────────────────────────────────────────────┤
@@ -292,9 +292,12 @@ def verify_key_commitment(key: bytes, expected: bytes) -> bool:
 
 ### Version 4 (Current)
 
+> **Note:** The magic bytes `SSCV2` identify the file format structure (with metadata header).
+> The `version` field in metadata indicates the cryptographic version (4 = Argon2id + key commitment).
+
 | Field | Size | Description |
 |-------|------|-------------|
-| Magic | 5 bytes | `SSCV2` (identifies format) |
+| Magic | 5 bytes | `SSCV2` (identifies file format structure) |
 | Meta length | 2 bytes | Big-endian uint16 |
 | Metadata | Variable | JSON with version, filename, hash, algorithm, key_commitment |
 | Salt | 16 bytes | Argon2id salt |
@@ -494,5 +497,5 @@ Keys exist only in software memory. For HSM requirements, consider:
 
 ---
 
-**Document version:** 1.0
-**Last updated:** December 2, 2025
+**Document version:** 1.1
+**Last updated:** December 5, 2025
