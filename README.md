@@ -27,7 +27,7 @@ A security-focused AES-256-GCM encryption CLI tool with passphrase vault and mod
 pip install secure-string-cipher
 
 # Run interactive CLI
-ssc-start
+ssc start
 
 # Or use non-interactive CLI
 ssc --help
@@ -83,12 +83,12 @@ ssc vault import backup.json
 
 **Security:** Passwords are never passed via command line arguments (prevents shell history exposure). All passwords are prompted interactively or retrieved from the vault.
 
-### Interactive CLI (`ssc-start`)
+### Interactive CLI (`ssc start`)
 
 For interactive use, run:
 
 ```bash
-ssc-start
+ssc start
 ```
 
 You'll see this menu:

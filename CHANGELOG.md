@@ -1,5 +1,28 @@
 # Changelog
 
+## [1.0.31] - 2025-12-05
+
+### Simplified CLI Entry Point
+
+Consolidated all CLI functionality under a single `ssc` command.
+
+#### Changes
+
+- **Single Entry Point**: Removed `ssc-start` - now just use `ssc start` for the interactive menu
+- **Consistent Interface**: All functionality accessible via `ssc` command:
+  - `ssc` - Shows help menu
+  - `ssc start` - Launch interactive menu
+  - `ssc encrypt` - Encrypt text or files
+  - `ssc decrypt` - Decrypt text or files
+  - `ssc store` - Store password in vault
+  - `ssc vault` - Manage vault
+
+#### Migration
+
+If you were using `ssc-start` or `cipher-start`, simply use `ssc start` instead.
+
+---
+
 ## [1.0.30] - 2025-12-05
 
 ### Non-Interactive CLI Mode
