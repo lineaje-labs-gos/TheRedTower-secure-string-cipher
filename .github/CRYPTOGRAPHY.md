@@ -211,7 +211,7 @@ File encryption uses a structured format with metadata:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│ MAGIC (5 bytes): "SSCV2"                                    │
+│ MAGIC (5 bytes): "SSCV4"                                    │
 ├─────────────────────────────────────────────────────────────┤
 │ METADATA_LENGTH (2 bytes): Big-endian uint16                │
 ├─────────────────────────────────────────────────────────────┤
