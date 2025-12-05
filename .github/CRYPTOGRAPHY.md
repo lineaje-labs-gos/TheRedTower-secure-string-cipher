@@ -27,6 +27,7 @@ secure-string-cipher is a password-based encryption tool using:
 - **HMAC-SHA256** for key commitment and vault integrity
 
 The design prioritizes:
+
 1. Resistance to offline brute-force attacks (Argon2id)
 2. Authenticated encryption (GCM tags)
 3. Resistance to partitioning oracle attacks (key commitment)
@@ -104,6 +105,7 @@ The design prioritizes:
 ### HMAC-SHA256
 
 Used for:
+
 1. **Key commitment** - Binds ciphertext to specific key
 2. **Vault integrity** - Detects tampering before decryption
 
@@ -121,7 +123,7 @@ Used for:
 
 ### Process
 
-```
+```text
 passphrase (UTF-8 bytes)
         │
         ▼
@@ -135,7 +137,7 @@ passphrase (UTF-8 bytes)
    key (32 bytes)
 ```
 
-### Code Reference
+### Key Derivation Code
 
 ```python
 # src/secure_string_cipher/core.py
@@ -164,7 +166,7 @@ def derive_key(passphrase: str, salt: bytes) -> bytes:
 
 ### Text Encryption
 
-```
+```text
 plaintext
     │
     ▼
@@ -209,7 +211,7 @@ salt ║ nonce ║ ciphertext ║ tag
 
 File encryption uses a structured format with metadata:
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────┐
 │ MAGIC (5 bytes): "SSCV2"                                    │
 ├─────────────────────────────────────────────────────────────┤
@@ -272,7 +274,7 @@ Store the commitment in metadata. During decryption:
 - **Fast rejection:** Wrong passwords fail at commitment check, not GCM tag
 - **Constant-time:** Comparison uses `hmac.compare_digest()`
 
-### Code Reference
+### Key Commitment Code
 
 ```python
 # src/secure_string_cipher/core.py
@@ -335,7 +337,7 @@ The passphrase vault stores encrypted passphrases for user convenience.
 
 ### Vault Structure
 
-```
+```text
 ┌─────────────────────────────────────┐
 │ HMAC (32 bytes)                     │
 ├─────────────────────────────────────┤
@@ -419,7 +421,7 @@ def add_timing_jitter(max_microseconds: int = 1000) -> None:
 
 ### Trust Boundaries
 
-```
+```text
 ┌─────────────────────────────────────────────────────────┐
 │                    TRUSTED                              │
 │  ┌───────────────┐  ┌───────────────┐  ┌─────────────┐  │
@@ -453,6 +455,7 @@ def add_timing_jitter(max_microseconds: int = 1000) -> None:
 ### 1. Python Memory Model
 
 Python strings are immutable; the garbage collector may copy sensitive data. Mitigations:
+
 - Use `SecureBytes`/`SecureString` with libsodium when available
 - Minimize passphrase lifetime in memory
 - Check `has_secure_memory()` for libsodium availability
@@ -460,12 +463,14 @@ Python strings are immutable; the garbage collector may copy sensitive data. Mit
 ### 2. No Forward Secrecy
 
 If a passphrase is compromised, all files encrypted with it can be decrypted. Mitigation:
+
 - Use unique passphrases per file when security is critical
 - Rotate passphrases periodically
 
 ### 3. Metadata Leakage
 
 Encrypted file metadata (filename, size) is visible in the encrypted format. Mitigations:
+
 - Content is fully encrypted
 - Filename can be randomized before encryption
 - Size padding not implemented (would increase storage)
@@ -473,6 +478,7 @@ Encrypted file metadata (filename, size) is visible in the encrypted format. Mit
 ### 4. Single-User Design
 
 No support for:
+
 - Multiple recipients
 - Public key encryption
 - Key escrow
@@ -482,6 +488,7 @@ This is intentional for simplicity. Use GPG/age for multi-recipient scenarios.
 ### 5. No Hardware Security Module Support
 
 Keys exist only in software memory. For HSM requirements, consider:
+
 - PKCS#11 integration (not implemented)
 - Hardware tokens (not implemented)
 
