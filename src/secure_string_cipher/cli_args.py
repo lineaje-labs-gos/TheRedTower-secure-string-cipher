@@ -135,7 +135,7 @@ def _get_vault() -> PassphraseVault:
     vault = PassphraseVault()
 
     # Check if vault exists
-    if not vault._vault_path.exists():
+    if not vault.vault_path.exists():
         print("Vault not initialized. Initialize now? (y/n): ", end="", flush=True)
         response = input().strip().lower()
         if response != "y":
@@ -145,8 +145,8 @@ def _get_vault() -> PassphraseVault:
         print()
         master = _prompt_password_with_validation("Set master password: ")
         # Store a dummy entry to initialize, then delete it
-        vault.store("__init__", "init", master)
-        vault.delete("__init__", master)
+        vault.store_passphrase("__init__", "init", master)
+        vault.delete_passphrase("__init__", master)
         _print_info("✓ Vault initialized.")
         print()
 
@@ -166,7 +166,7 @@ def _get_password_from_vault(label: str) -> str:
     master = _prompt_master_password()
 
     try:
-        return vault.retrieve(label, master)
+        return vault.retrieve_passphrase(label, master)
     except KeyError:
         _exit_error(EXIT_VAULT_ERROR, f"Label '{label}' not found in vault.")
     except CryptoError:
@@ -341,7 +341,7 @@ def cmd_store(args: argparse.Namespace) -> int:
 
     # Get password to store
     if args.generate:
-        password = generate_passphrase(length=24)
+        password, _ = generate_passphrase(length=24)
     else:
         password = _prompt_password_with_validation("Enter password to store: ")
 
@@ -350,7 +350,7 @@ def cmd_store(args: argparse.Namespace) -> int:
 
     # Store in vault
     try:
-        vault.store(args.label, password, master)
+        vault.store_passphrase(args.label, password, master)
         _print_info(
             f"✓ {'Generated and stored' if args.generate else 'Stored'} as: {args.label}"
         )
@@ -390,7 +390,7 @@ def cmd_vault_delete(args: argparse.Namespace) -> int:
     master = _prompt_master_password()
 
     try:
-        vault.delete(args.label, master)
+        vault.delete_passphrase(args.label, master)
         _print_info(f"✓ Deleted: {args.label}")
         return EXIT_SUCCESS
     except KeyError:
@@ -409,8 +409,8 @@ def cmd_vault_export(args: argparse.Namespace) -> int:
         vault.list_labels(master)
 
         # Read raw vault file
-        if vault._vault_path.exists():
-            content = vault._vault_path.read_text()
+        if vault.vault_path.exists():
+            content = vault.vault_path.read_text()
             print(content)
             _print_info("✓ Vault exported (pipe to file to save)")
             return EXIT_SUCCESS
@@ -430,7 +430,7 @@ def cmd_vault_import(args: argparse.Namespace) -> int:
     vault = PassphraseVault()
 
     # Confirm if vault exists
-    if vault._vault_path.exists():
+    if vault.vault_path.exists():
         print("Existing vault will be replaced. Continue? (y/n): ", end="", flush=True)
         response = input().strip().lower()
         if response != "y":
@@ -438,8 +438,8 @@ def cmd_vault_import(args: argparse.Namespace) -> int:
 
     try:
         content = import_path.read_text()
-        vault._vault_path.parent.mkdir(parents=True, exist_ok=True)
-        vault._vault_path.write_text(content)
+        vault.vault_path.parent.mkdir(parents=True, exist_ok=True)
+        vault.vault_path.write_text(content)
         _print_info("✓ Vault imported successfully")
         return EXIT_SUCCESS
     except OSError as e:
@@ -450,7 +450,7 @@ def cmd_vault_reset(args: argparse.Namespace) -> int:
     """Reset (wipe) vault."""
     vault = PassphraseVault()
 
-    if not vault._vault_path.exists():
+    if not vault.vault_path.exists():
         _exit_error(EXIT_VAULT_ERROR, "Vault does not exist.")
 
     print("⚠️  This will PERMANENTLY DELETE all stored passwords.")
@@ -461,7 +461,7 @@ def cmd_vault_reset(args: argparse.Namespace) -> int:
         _exit_error(EXIT_INPUT_ERROR, "Reset cancelled.")
 
     try:
-        vault._vault_path.unlink()
+        vault.vault_path.unlink()
         _print_info("✓ Vault reset. All passwords deleted.")
         return EXIT_SUCCESS
     except OSError as e:

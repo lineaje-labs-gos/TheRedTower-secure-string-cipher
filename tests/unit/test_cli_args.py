@@ -583,7 +583,7 @@ class TestVaultCommands:
         result = cmd_vault_delete(args)
 
         assert result == EXIT_SUCCESS
-        mock_vault_instance.delete.assert_called_once_with(
+        mock_vault_instance.delete_passphrase.assert_called_once_with(
             "my-label", "MasterPassword123!"
         )
 
@@ -593,7 +593,7 @@ class TestVaultCommands:
         """vault delete should exit with VAULT_ERROR for missing label."""
         mock_master.return_value = "MasterPassword123!"
         mock_vault_instance = MagicMock()
-        mock_vault_instance.delete.side_effect = KeyError("Label not found")
+        mock_vault_instance.delete_passphrase.side_effect = KeyError("Label not found")
         mock_vault.return_value = mock_vault_instance
 
         args = argparse.Namespace(label="nonexistent")

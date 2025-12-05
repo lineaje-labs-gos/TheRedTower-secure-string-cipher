@@ -230,6 +230,7 @@ This checklist is designed for third-party security auditors reviewing secure-st
 ### 7.1 Dependency Security (HIGH)
 
 - [ ] **Run vulnerability scan**
+
   ```bash
   pip-audit
   ```
