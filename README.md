@@ -210,16 +210,16 @@ from secure_string_cipher import PassphraseVault
 vault = PassphraseVault()
 
 # Store a passphrase
-vault.store("my-server", "MySecurePass123!", master_password="VaultMaster456!")  # pragma: allowlist secret
+vault.store("my-server", "MySecurePass123!", master_password="VaultMaster456!")  
 
 # Retrieve it
-password = vault.retrieve("my-server", master_password="VaultMaster456!")  # pragma: allowlist secret
+password = vault.retrieve("my-server", master_password="VaultMaster456!")
 
 # List all labels
 labels = vault.list_labels()
 
 # Delete an entry
-vault.delete("my-server", master_password="VaultMaster456!")  # pragma: allowlist secret
+vault.delete("my-server", master_password="VaultMaster456!")
 ```
 
 ### Security Utilities
