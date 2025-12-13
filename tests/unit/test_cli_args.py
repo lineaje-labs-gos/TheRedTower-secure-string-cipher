@@ -619,7 +619,7 @@ class TestVaultImportReset:
     def test_vault_reset_requires_confirmation(self, mock_vault_class, mock_input):
         """vault reset should require typing RESET."""
         mock_vault_instance = MagicMock()
-        mock_vault_instance._vault_path.exists.return_value = True
+        mock_vault_instance.vault_path.exists.return_value = True
         mock_vault_class.return_value = mock_vault_instance
 
         args = argparse.Namespace()

@@ -6,7 +6,7 @@
 
 Consolidated all CLI functionality under a single `ssc` command.
 
-#### Changes
+#### Updates
 
 - **Single Entry Point**: Removed `ssc-start` - now just use `ssc start` for the interactive menu
 - **Consistent Interface**: All functionality accessible via `ssc` command:
