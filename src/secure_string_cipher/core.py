@@ -694,62 +694,72 @@ def decrypt_file(
                 raise CryptoError("Invalid encrypted file format")
 
             salt, nonce = header[:SALT_SIZE], header[SALT_SIZE:]
-            encrypted_data = f.read()
 
-        # Determine output path
-        if output_path is None:
-            if restore_filename and metadata and metadata.original_filename:
-                # Sanitize the stored filename for security
-                safe_name = sanitize_filename(metadata.original_filename)
-                # Use sanitized name if it's valid (not empty after sanitization)
-                if safe_name:
-                    # Use the sanitized original filename in the same directory as input
-                    output_dir = os.path.dirname(input_path) or "."
-                    output_path = os.path.join(output_dir, safe_name)
+            # Determine output path
+            if output_path is None:
+                if restore_filename and metadata and metadata.original_filename:
+                    # Sanitize the stored filename for security
+                    safe_name = sanitize_filename(metadata.original_filename)
+                    # Use sanitized name if it's valid (not empty after sanitization)
+                    if safe_name:
+                        # Use the sanitized original filename in the same directory as input
+                        output_dir = os.path.dirname(input_path) or "."
+                        output_path = os.path.join(output_dir, safe_name)
+                    else:
+                        # Fallback if filename is empty after sanitization
+                        output_path = input_path + ".dec"
                 else:
-                    # Fallback if filename is empty after sanitization
                     output_path = input_path + ".dec"
-            else:
-                output_path = input_path + ".dec"
 
-        # Decrypt
-        if len(encrypted_data) < TAG_SIZE:
-            raise CryptoError("File too short - not a valid encrypted file")
+            # Wrap key in SecureBytes to ensure it's wiped after use
+            from .secure_memory import SecureBytes
 
-        tag = encrypted_data[-TAG_SIZE:]
-        ciphertext = encrypted_data[:-TAG_SIZE]
+            with SecureBytes(derive_key(passphrase, salt)) as secure_key:
+                # Verify key commitment
+                if metadata.key_commitment is not None:
+                    try:
+                        expected_commitment = base64.b64decode(metadata.key_commitment)
+                        if not verify_key_commitment(
+                            bytes(secure_key.data), expected_commitment
+                        ):
+                            raise CryptoError(
+                                "Key commitment verification failed - wrong password or tampered file"
+                            )
+                    except (ValueError, TypeError) as e:
+                        raise CryptoError(f"Invalid key commitment format: {e}") from e
+                else:
+                    raise CryptoError(
+                        "File missing key commitment - may have been tampered with"
+                    )
 
-        # Wrap key in SecureBytes to ensure it's wiped after use
-        from .secure_memory import SecureBytes
+                decryptor = Cipher(
+                    algorithms.AES(secure_key.data),
+                    modes.GCM(nonce),
+                    backend=default_backend(),
+                ).decryptor()
 
-        with SecureBytes(derive_key(passphrase, salt)) as secure_key:
-            # Verify key commitment
-            if metadata.key_commitment is not None:
-                try:
-                    expected_commitment = base64.b64decode(metadata.key_commitment)
-                    if not verify_key_commitment(
-                        bytes(secure_key.data), expected_commitment
-                    ):
-                        raise CryptoError(
-                            "Key commitment verification failed - wrong password or tampered file"
-                        )
-                except (ValueError, TypeError) as e:
-                    raise CryptoError(f"Invalid key commitment format: {e}") from e
-            else:
-                raise CryptoError(
-                    "File missing key commitment - may have been tampered with"
-                )
+                with StreamProcessor(output_path, "wb") as w:
+                    buffer = bytearray()
 
-            decryptor = Cipher(
-                algorithms.AES(secure_key.data),
-                modes.GCM(nonce, tag),
-                backend=default_backend(),
-            ).decryptor()
+                    for chunk in iter(lambda: f.read(CHUNK_SIZE), b""):
+                        buffer.extend(chunk)
+                        if len(buffer) > TAG_SIZE:
+                            emit_len = len(buffer) - TAG_SIZE
+                            if emit_len:
+                                w.write(decryptor.update(memoryview(buffer)[:emit_len]))
+                                del buffer[:emit_len]
 
-            plaintext = decryptor.update(ciphertext) + decryptor.finalize()
+                    if len(buffer) < TAG_SIZE:
+                        raise CryptoError("File too short - not a valid encrypted file")
 
-        with StreamProcessor(output_path, "wb") as w:
-            w.write(plaintext)
+                    tail_view = memoryview(buffer)
+                    ciphertext_tail = tail_view[:-TAG_SIZE]
+                    tag = bytes(tail_view[-TAG_SIZE:])
+
+                    if ciphertext_tail:
+                        w.write(decryptor.update(ciphertext_tail))
+
+                    w.write(decryptor.finalize_with_tag(tag))
 
         return output_path, metadata
 

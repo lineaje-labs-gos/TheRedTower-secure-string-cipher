@@ -17,7 +17,7 @@ ARGON2_HASH_LENGTH = 32  # Output key length (256 bits for AES-256)
 # Encryption Parameters
 # =============================================================================
 
-CHUNK_SIZE = 64 * 1024
+CHUNK_SIZE = 256 * 1024
 SALT_SIZE = 16
 NONCE_SIZE = 12
 TAG_SIZE = 16
