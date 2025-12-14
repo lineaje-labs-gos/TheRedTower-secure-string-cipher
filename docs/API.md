@@ -72,30 +72,47 @@ Encrypt a file using AES-256-GCM with chunked streaming.
 ```python
 from secure_string_cipher import encrypt_file
 
-encrypt_file(filepath: str, passphrase: str) -> str
+encrypt_file(
+    input_path: str,
+    output_path: str,
+    passphrase: str,
+    store_filename: bool = True,
+) -> None
 ```
 
 **Parameters:**
 
-- `filepath` (str): Path to the file to encrypt
+- `input_path` (str): Path to the file to encrypt
+- `output_path` (str): Destination path for the encrypted file (must be provided)
 - `passphrase` (str): Password for key derivation
+- `store_filename` (bool): Whether to embed the sanitized original filename in metadata (default: True)
 
-**Returns:** Path to the encrypted file (original filename + `.enc`)
+**Returns:** None (writes the encrypted file to `output_path`).
 
 **Raises:**
 
 - `CryptoError` if encryption fails
 - `SecurityError` if path validation fails (traversal, symlink attacks)
 - `FileNotFoundError` if file doesn't exist
-- `ValueError` if file exceeds 100MB limit
+- `ValueError` if file exceeds the configured size limit
+
+**Security/IO notes:**
+
+- `_ensure_no_symlink` rejects symlinked inputs/outputs unless in the allowlist (e.g., `/var`).
+- `StreamProcessor` refuses to overwrite an existing file without an explicit prompt/confirmation.
 
 **Example:**
 
 ```python
 from secure_string_cipher import encrypt_file
 
-output_path = encrypt_file("document.pdf", "MySecurePass123!")
-print(output_path)  # "document.pdf.enc"
+encrypt_file(
+    input_path="document.pdf",
+    output_path="document.pdf.enc",
+    passphrase="MySecurePass123!",
+    store_filename=True,
+)
+print("Encrypted to document.pdf.enc")
 ```
 
 ---
@@ -107,28 +124,47 @@ Decrypt a file encrypted with `encrypt_file`.
 ```python
 from secure_string_cipher import decrypt_file
 
-decrypt_file(filepath: str, passphrase: str) -> str
+output_path, metadata = decrypt_file(
+    input_path: str,
+    output_path: str | None = None,
+    passphrase: str,
+    restore_filename: bool = True,
+) -> tuple[str, FileMetadata | None]
 ```
 
 **Parameters:**
 
-- `filepath` (str): Path to the encrypted file (`.enc` extension)
+- `input_path` (str): Path to the encrypted file
+- `output_path` (str | None): Destination for the decrypted file. If None, the function restores the stored sanitized filename when available; otherwise uses `<input>.dec`.
 - `passphrase` (str): Same password used for encryption
+- `restore_filename` (bool): Whether to use the stored filename metadata when present (default: True)
 
-**Returns:** Path to the decrypted file (original filename without `.enc`)
+**Returns:** Tuple of `(output_path, metadata)` where `metadata` is a `FileMetadata` instance containing `original_filename` (if stored) and base64-encoded `key_commitment`.
 
 **Raises:**
 
 - `CryptoError` if decryption fails
-- `SecurityError` if path validation fails
+- `SecurityError` if path validation fails or symlinks are detected
+
+**Security/IO notes:**
+
+- `_ensure_no_symlink` rejects symlinked inputs/outputs unless in the allowlist (e.g., `/var`).
+- `StreamProcessor` refuses to overwrite an existing file without an explicit prompt/confirmation.
 
 **Example:**
 
 ```python
 from secure_string_cipher import decrypt_file
 
-output_path = decrypt_file("document.pdf.enc", "MySecurePass123!")
-print(output_path)  # "document.pdf"
+output_path, metadata = decrypt_file(
+    input_path="document.pdf.enc",
+    output_path=None,  # restore stored filename when present
+    passphrase="MySecurePass123!",
+    restore_filename=True,
+)
+print(output_path)  # e.g., "document.pdf" or "document.pdf.enc.dec" if no name stored
+print(metadata.original_filename)  # "document.pdf" when stored
+print(metadata.key_commitment)     # base64 string
 ```
 
 ---

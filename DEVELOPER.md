@@ -3,10 +3,10 @@
 ## Quick Start
 
 ```bash
-# Clone and install with dev dependencies
+# Clone and install with locked dev dependencies
 git clone https://github.com/TheRedTower/secure-string-cipher.git
 cd secure-string-cipher
-pip install -e ".[dev]"
+uv sync --extra dev --locked
 ```
 
 ## Workflow
@@ -70,17 +70,19 @@ make ci
 
 ## CI/CD
 
-GitHub Actions runs a two-stage pipeline:
+GitHub Actions uses uv-locked installs and runs a two-stage pipeline:
 
 1. **Quality checks** (Python 3.14 only):
-   - Ruff lint + format check
-   - mypy type checking
-   - Secret scanning (detect-secrets)
-   - Vulnerability scanning (pip-audit)
+   - uv sync --extra dev --locked
+   - Ruff lint + format check (uv run --locked)
+   - mypy type checking (uv run --locked)
+   - Secret scan (uv run --locked detect-secrets --baseline .secrets.baseline)
+   - Vulnerability scan (uv run --locked pip-audit --desc)
 
 2. **Test matrix** (Python 3.12, 3.13, 3.14 in parallel):
-   - Full pytest suite
-   - Coverage reporting on 3.14
+   - uv sync --extra dev --locked
+   - Full pytest suite (uv run --locked pytest)
+   - Coverage reporting and 69% gate on 3.14
 
 ## Common Tasks
 

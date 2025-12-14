@@ -1,7 +1,7 @@
 # secure-string-cipher
 
 [![CI](https://github.com/TheRedTower/secure-string-cipher/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/TheRedTower/secure-string-cipher/actions/workflows/ci.yml)
-[![Coverage](https://img.shields.io/badge/coverage-79%25-green.svg)](https://github.com/TheRedTower/secure-string-cipher)
+[![Coverage](https://img.shields.io/badge/coverage-77%25-green.svg)](https://github.com/TheRedTower/secure-string-cipher)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python](https://img.shields.io/badge/Python-3.12+-blue.svg)](https://www.python.org/downloads/)
 
@@ -23,7 +23,7 @@ A security-focused AES-256-GCM encryption CLI tool with passphrase vault and mod
 ## Quick Start
 
 ```bash
-# Install
+# Install from PyPI
 pip install secure-string-cipher
 
 # Run interactive CLI
@@ -42,10 +42,13 @@ pipx install secure-string-cipher
 # Or with pip
 pip install secure-string-cipher
 
-# Or from source
+# Or from source (dev/install with uv)
 git clone https://github.com/TheRedTower/secure-string-cipher.git
 cd secure-string-cipher
-pip install .
+uv sync --extra dev --locked
+
+# Run tooling with the locked environment
+uv run --locked ssc --help
 ```
 
 > Requires Python 3.12+
@@ -199,14 +202,14 @@ Use secure-string-cipher as a library in your Python projects:
 ### Text Encryption
 
 ```python
-from secure_string_cipher import encrypt_string, decrypt_string
+from secure_string_cipher import encrypt_text, decrypt_text
 
 # Encrypt a message
-ciphertext = encrypt_string("Secret message", "MySecurePass123!")
+ciphertext = encrypt_text("Secret message", "MySecurePass123!")
 print(ciphertext)  # Base64-encoded string
 
 # Decrypt it back
-plaintext = decrypt_string(ciphertext, "MySecurePass123!")
+plaintext = decrypt_text(ciphertext, "MySecurePass123!")
 print(plaintext)  # "Secret message"
 ```
 
@@ -215,12 +218,14 @@ print(plaintext)  # "Secret message"
 ```python
 from secure_string_cipher import encrypt_file, decrypt_file
 
-# Encrypt a file (creates file.txt.enc)
-encrypt_file("document.pdf", "MySecurePass123!")
+# Encrypt a file (explicit output path)
+encrypt_file("document.pdf", "document.pdf.enc", "MySecurePass123!")
 
-# Decrypt it (creates document.pdf from document.pdf.enc)
-decrypt_file("document.pdf.enc", "MySecurePass123!")
+# Decrypt it (explicit output path)
+decrypt_file("document.pdf.enc", "document.pdf", "MySecurePass123!")
 ```
+
+> File operations refuse symlinked inputs/outputs (except system-managed paths like /var) to prevent path hijacking.
 
 ### Passphrase Generation
 
@@ -229,12 +234,7 @@ from secure_string_cipher import generate_passphrase
 
 # Generate a 24-character passphrase (155+ bits entropy)
 passphrase = generate_passphrase(length=24)
-print(passphrase)  # e.g., "8w@!-@_#M)wF,Qn(ms.Uv+3z"
-
-# Calculate entropy
-from secure_string_cipher import calculate_entropy
-bits = calculate_entropy(passphrase)
-print(f"Entropy: {bits:.1f} bits")
+print(passphrase)
 ```
 
 ### Vault Operations
@@ -303,11 +303,13 @@ if has_secure_memory():
 ```bash
 git clone https://github.com/TheRedTower/secure-string-cipher.git
 cd secure-string-cipher
-pip install -e ".[dev]"
+uv sync --extra dev --locked
 
-make format      # Auto-format with Ruff
-make test-quick  # Fast tests (~10s, 207 tests)
-make ci          # Full CI pipeline (lint + type check + 615 tests)
+# Run checks with the locked environment
+uv run --locked ruff check src tests
+uv run --locked ruff format --check src tests
+uv run --locked mypy src tests
+uv run --locked pytest tests/ --cov=secure_string_cipher --cov-report=xml --cov-fail-under=69
 ```
 
 See [DEVELOPER.md](DEVELOPER.md) for detailed development workflow and [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidelines.

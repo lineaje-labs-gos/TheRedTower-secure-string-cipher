@@ -43,10 +43,15 @@ This project follows a Code of Conduct adapted from the Contributor Covenant. By
 **Python 3.12+ required** (3.14 recommended for development).
 
 ```bash
-python3.14 -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
-pip install -e ".[dev]"
+# Install dependencies from the lockfile (keeps parity with CI)
+uv sync --extra dev --locked
 
+# Run tools through the locked environment
+uv run --locked ruff check src tests
+uv run --locked mypy src tests
+uv run --locked pytest tests/ --maxfail=3 -n auto
+
+# Optional: Make targets wrap the same commands
 make format  # Auto-fix formatting
 make ci      # Run full CI pipeline
 ```
@@ -65,7 +70,7 @@ See [DEVELOPER.md](DEVELOPER.md) for detailed workflow, troubleshooting, and rel
 ## Testing
 
 * Write tests for new features
-* Maintain coverage above 79% threshold (current: 79.39%)
+* CI coverage gate: 69% (current: ~77%)
 * Include positive and negative test cases
 * Test edge cases and error conditions
 * Use parameterized tests when appropriate
@@ -73,6 +78,12 @@ See [DEVELOPER.md](DEVELOPER.md) for detailed workflow, troubleshooting, and rel
 ### Test Commands
 
 ```bash
+# Direct (CI-parity)
+uv run --locked ruff check src tests
+uv run --locked mypy src tests
+uv run --locked pytest tests/ --maxfail=3 -n auto
+
+# Optional make wrappers
 make test-quick   # Fast tests (~10s) - for development iteration
 make test         # Full suite (615 tests, ~80s)
 make test-cov     # Full suite with coverage report
