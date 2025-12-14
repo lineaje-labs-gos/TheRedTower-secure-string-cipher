@@ -24,7 +24,7 @@ make ci        # Run full CI pipeline locally
 make help         # List all commands
 make format       # Auto-format with Ruff
 make lint         # Check style, types, and code quality
-make test         # Run full test suite (615 tests, ~80s)
+make test         # Run full test suite (618 tests, ~80s)
 make test-quick   # Run fast tests only (207 tests, ~10s)
 make test-slow    # Run KDF/fuzz/performance tests
 make test-cov     # Run tests with coverage
@@ -61,7 +61,7 @@ make ci
 
 ### pytest (Testing)
 
-- Runs automated tests (615 tests)
+- Runs automated tests (618 tests)
 - Unit tests in `tests/unit/`, integration tests in `tests/integration/`
 - Security tests in `tests/security/`, fuzz tests in `tests/fuzz/`
 - Performance benchmarks in `tests/performance/`

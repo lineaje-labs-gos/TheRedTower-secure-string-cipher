@@ -17,7 +17,7 @@ A security-focused AES-256-GCM encryption CLI tool with passphrase vault and mod
 - **Encrypted passphrase vault** with HMAC-SHA256 integrity verification
 - **Secure memory handling** via libsodium (PyNaCl) when available
 - **Timing-safe operations** – constant-time comparisons prevent side-channel attacks
-- Chunked file streaming (64KB) for low memory usage
+- Chunked file streaming (256 KiB) for low memory usage
 - Automatic vault backups (last 5 kept)
 
 ## Quick Start
@@ -172,7 +172,7 @@ docker run --rm -it ghcr.io/theredtower/secure-string-cipher:latest
 git clone https://github.com/TheRedTower/secure-string-cipher.git
 cd secure-string-cipher
 docker compose up -d
-docker compose exec cipher cipher-start
+docker compose exec cipher ssc start
 ```
 
 To encrypt files in your current directory:

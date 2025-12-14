@@ -11,26 +11,26 @@ install:  ## Install package and dev dependencies
 
 format:  ## Auto-format code with Ruff
 	@echo "✨ Formatting code with Ruff..."
-	ruff format src tests
-	ruff check --fix src tests
+	uv run --locked ruff format src tests
+	uv run --locked ruff check --fix src tests
 	@echo "✅ Formatting complete!"
 
 lint:  ## Run all linting checks (Ruff format check, Ruff lint, mypy)
 	@echo "🔍 Checking code format..."
-	ruff format --check src tests
+	uv run --locked ruff format --check src tests
 	@echo "� Checking code quality..."
-	ruff check src tests
+	uv run --locked ruff check src tests
 	@echo "🔬 Running mypy type checks..."
-	mypy src tests
+	uv run --locked mypy src tests
 	@echo "✅ All linting checks passed!"
 
 test:  ## Run tests with pytest
 	@echo "🧪 Running tests..."
-	pytest tests/ -v
+	uv run --locked pytest tests/ -v
 
 test-fast:  ## Run tests in parallel (3-4x faster)
 	@echo "🚀 Running tests in parallel..."
-	pytest -n auto --dist loadfile
+	uv run --locked pytest -n auto --dist loadfile
 
 test-watch:  ## Run tests in watch mode (auto-rerun on changes)
 	@echo "👀 Watching for changes..."
@@ -38,31 +38,31 @@ test-watch:  ## Run tests in watch mode (auto-rerun on changes)
 
 test-unit:  ## Run only unit tests
 	@echo "🧪 Running unit tests..."
-	pytest -m unit -v
+	uv run --locked pytest -m unit -v
 
 test-integration:  ## Run only integration tests
 	@echo "🔗 Running integration tests..."
-	pytest -m integration -v
+	uv run --locked pytest -m integration -v
 
 test-security:  ## Run only security tests
 	@echo "🔒 Running security tests..."
-	pytest -m security -v
+	uv run --locked pytest -m security -v
 
 test-quick:  ## Run fast tests only (~10s vs ~80s) - skips KDF/fuzz/perf
 	@echo "⚡ Running quick tests (no KDF-heavy tests)..."
-	pytest tests/unit/ tests/integration/ -q --ignore=tests/unit/test_kdf.py --ignore=tests/unit/test_core_extended.py --ignore=tests/unit/test_passphrase_manager_extended.py --ignore=tests/integration/test_passphrase_manager.py --ignore=tests/integration/test_cli_workflows.py -x
+	uv run --locked pytest tests/unit/ tests/integration/ -q --ignore=tests/unit/test_kdf.py --ignore=tests/unit/test_core_extended.py --ignore=tests/unit/test_passphrase_manager_extended.py --ignore=tests/integration/test_passphrase_manager.py --ignore=tests/integration/test_cli_workflows.py -x
 
 test-slow:  ## Run slow tests only (KDF, fuzz, performance)
 	@echo "🐢 Running slow tests (KDF, fuzz, performance)..."
-	pytest tests/unit/test_kdf.py tests/unit/test_core_extended.py tests/unit/test_passphrase_manager_extended.py tests/fuzz/ tests/performance/ tests/integration/test_passphrase_manager.py -v
+	uv run --locked pytest tests/unit/test_kdf.py tests/unit/test_core_extended.py tests/unit/test_passphrase_manager_extended.py tests/fuzz/ tests/performance/ tests/integration/test_passphrase_manager.py -v
 
 test-failed:  ## Re-run only failed tests
 	@echo "🔄 Re-running failed tests..."
-	pytest --lf -v
+	uv run --locked pytest --lf -v
 
 test-cov:  ## Run tests with coverage report
 	@echo "🧪 Running tests with coverage..."
-	pytest tests/ --cov=secure_string_cipher --cov-report=term-missing --cov-report=html
+	uv run --locked pytest tests/ --cov=secure_string_cipher --cov-report=term-missing --cov-report=html
 
 clean:  ## Clean up temporary files and caches
 	@echo "🧹 Cleaning up..."

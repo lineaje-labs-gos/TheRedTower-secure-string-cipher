@@ -17,9 +17,19 @@ from typing import NoReturn
 
 from . import __version__
 from .cli import main as run_interactive_menu
-from .core import CryptoError, decrypt_file, decrypt_text, encrypt_file, encrypt_text
+from .config import METADATA_MAGIC
+from .core import (
+    CryptoError,
+    FileMetadata,
+    _ensure_no_symlink,
+    decrypt_file,
+    decrypt_text,
+    encrypt_file,
+    encrypt_text,
+)
 from .passphrase_generator import generate_passphrase
 from .passphrase_manager import PassphraseVault
+from .security import sanitize_filename
 from .timing_safe import check_password_strength
 from .utils import colorize
 
@@ -173,6 +183,71 @@ def _get_password_from_vault(label: str) -> str:
         _exit_error(EXIT_AUTH_ERROR, "Wrong master password.")
 
 
+def _load_file_metadata(input_path: Path) -> FileMetadata:
+    """Load unencrypted metadata from an encrypted file.
+
+    Args:
+        input_path: Encrypted file path
+
+    Returns:
+        Parsed FileMetadata
+
+    Raises:
+        CryptoError: When the file is malformed or missing required headers
+    """
+
+    with open(input_path, "rb") as f:
+        magic = f.read(len(METADATA_MAGIC))
+        if magic != METADATA_MAGIC:
+            raise CryptoError(
+                "Invalid file format: missing magic header. "
+                "This file may have been encrypted with an older version."
+            )
+
+        meta_len_bytes = f.read(2)
+        if len(meta_len_bytes) != 2:
+            raise CryptoError("Invalid file: truncated metadata length")
+        meta_len = int.from_bytes(meta_len_bytes, "big")
+        if meta_len > 65535:
+            raise CryptoError("Invalid file: metadata too large")
+
+        meta_bytes = f.read(meta_len)
+        if len(meta_bytes) != meta_len:
+            raise CryptoError("Invalid file: truncated metadata")
+
+    return FileMetadata.from_bytes(meta_bytes)
+
+
+def _determine_output_path(filepath: Path, restore_filename: bool) -> Path:
+    """Choose output path using metadata when available.
+
+    Prefers restoring the original filename stored in metadata when
+    `restore_filename` is True; otherwise falls back to deterministic names
+    that avoid overwriting the original file.
+    """
+
+    metadata: FileMetadata | None = None
+    if restore_filename:
+        try:
+            metadata = _load_file_metadata(filepath)
+        except CryptoError:
+            metadata = None
+
+    if restore_filename and metadata and metadata.original_filename:
+        safe_name = sanitize_filename(metadata.original_filename)
+        if safe_name:
+            output_dir = filepath.parent or Path(".")
+            return output_dir / safe_name
+
+    if not restore_filename and filepath.suffix == ".enc":
+        return filepath.with_suffix(".dec")
+
+    if filepath.suffix == ".enc":
+        return filepath.with_suffix("")
+
+    return filepath.with_name(filepath.name + ".dec")
+
+
 # =============================================================================
 # Command: start (interactive)
 # =============================================================================
@@ -268,6 +343,8 @@ def cmd_decrypt(args: argparse.Namespace) -> int:
         _exit_error(EXIT_INPUT_ERROR, "Cannot specify both --text and --file.")
 
     # Validate file existence and overwrite BEFORE prompting for password
+    output_arg = getattr(args, "output", None)
+    restore_filename = getattr(args, "restore_filename", True)
     output_path = None
     if args.file:
         filepath = Path(args.file)
@@ -275,11 +352,15 @@ def cmd_decrypt(args: argparse.Namespace) -> int:
         if not filepath.exists():
             _exit_error(EXIT_FILE_ERROR, f"File not found: {args.file}")
 
-        # Determine output path
-        if filepath.suffix == ".enc":
-            output_path = filepath.with_suffix("")
-        else:
-            output_path = filepath.with_name(filepath.name + ".decrypted")
+        # Determine intended output path (surface filesystem errors as file-exit)
+        try:
+            _ensure_no_symlink(filepath, "input")
+            if output_arg:
+                output_path = Path(output_arg)
+            else:
+                output_path = _determine_output_path(filepath, restore_filename)
+        except (OSError, PermissionError, CryptoError) as e:
+            _exit_error(EXIT_FILE_ERROR, f"File error: {e}")
 
         # Check overwrite
         if output_path.exists() and not args.force:
@@ -315,7 +396,12 @@ def cmd_decrypt(args: argparse.Namespace) -> int:
             output_path.unlink()
 
         try:
-            actual_output, _ = decrypt_file(str(filepath), str(output_path), password)
+            actual_output, _ = decrypt_file(
+                str(filepath),
+                str(output_path) if output_path else None,
+                password,
+                restore_filename=restore_filename,
+            )
             _print_info(f"✓ Decrypted to {actual_output}")
             return EXIT_SUCCESS
         except CryptoError:
@@ -591,6 +677,18 @@ Examples:
         "--file",
         metavar="PATH",
         help="File to decrypt",
+    )
+    decrypt_parser.add_argument(
+        "-o",
+        "--output",
+        metavar="PATH",
+        help="Output file path (overrides stored filename)",
+    )
+    decrypt_parser.add_argument(
+        "--restore-filename",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Restore original filename from metadata when available (default: on)",
     )
     decrypt_parser.add_argument(
         "--vault",

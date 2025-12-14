@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.0.32] - 2025-12-14
+
+### Security & CLI Hardening
+
+- Decrypt file flow now checks for symlinked inputs before any metadata reads, preserving exit codes and blocking traversal attempts.
+- Added `--output` and `--restore-filename/--no-restore-filename` flags to `ssc decrypt`; default restores original filenames safely, with tested fallback to `.dec` when restore is disabled.
+- Extended CLI tests to cover output override, restore toggling, and metadata-driven filename restoration.
+
+### Tooling & Packaging
+
+- Makefile now runs lint/tests via `uv run --locked` for CI parity.
+- Docker image entrypoint aligned to `ssc` and image labels bumped to match version.
+- README/DEVELOPER docs updated (test counts, docker compose command, chunk size note).
+
+---
+
 ## [1.0.31] - 2025-12-05
 
 ### Simplified CLI Entry Point

@@ -25,6 +25,7 @@ from secure_string_cipher.cli_args import (
     cmd_vault_reset,
     create_parser,
 )
+from secure_string_cipher.core import encrypt_file
 
 # =============================================================================
 # Parser Tests
@@ -122,6 +123,18 @@ class TestDecryptParser:
         parser = create_parser()
         args = parser.parse_args(["decrypt", "-t", "test", "--vault", "my-key"])
         assert args.vault == "my-key"
+
+    def test_decrypt_output_flag(self):
+        """decrypt --output should set output path."""
+        parser = create_parser()
+        args = parser.parse_args(["decrypt", "-f", "file.enc", "--output", "out.txt"])
+        assert args.output == "out.txt"
+
+    def test_decrypt_restore_toggle(self):
+        """decrypt --no-restore-filename should disable restore."""
+        parser = create_parser()
+        args = parser.parse_args(["decrypt", "-f", "file.enc", "--no-restore-filename"])
+        assert args.restore_filename is False
 
 
 class TestStoreParser:
@@ -378,6 +391,8 @@ class TestFileEncryption:
             force=False,
             quiet=False,
             no_color=True,
+            output=None,
+            restore_filename=True,
         )
         with patch(
             "secure_string_cipher.cli_args._prompt_password",
@@ -386,6 +401,70 @@ class TestFileEncryption:
             with pytest.raises(SystemExit) as exc_info:
                 cmd_decrypt(args)
             assert exc_info.value.code == EXIT_FILE_ERROR
+
+    def test_decrypt_restores_original_filename(self, tmp_path):
+        """decrypt should restore original filename from metadata when not overridden."""
+        original = tmp_path / "secret.txt"
+        encrypted = tmp_path / "secret.txt.enc"
+        password = "SecurePassword123!@#"  # pragma: allowlist secret
+
+        original.write_text("classified")
+        encrypt_file(str(original), str(encrypted), password)
+        original.unlink()
+
+        args = argparse.Namespace(
+            text=None,
+            file=str(encrypted),
+            vault=None,
+            force=False,
+            quiet=True,
+            no_color=True,
+            output=None,
+            restore_filename=True,
+        )
+
+        with patch(
+            "secure_string_cipher.cli_args._prompt_password",
+            return_value=password,
+        ):
+            result = cmd_decrypt(args)
+
+        assert result == EXIT_SUCCESS
+        restored_path = tmp_path / "secret.txt"
+        assert restored_path.exists()
+        assert restored_path.read_text() == "classified"
+
+    def test_decrypt_respects_no_restore_flag(self, tmp_path):
+        """decrypt should use .dec fallback when restore is disabled and no output provided."""
+        original = tmp_path / "notes.txt"
+        encrypted = tmp_path / "notes.txt.enc"
+        password = "SecurePassword123!@#"  # pragma: allowlist secret
+
+        original.write_text("data")
+        encrypt_file(str(original), str(encrypted), password)
+        original.unlink()
+
+        args = argparse.Namespace(
+            text=None,
+            file=str(encrypted),
+            vault=None,
+            force=False,
+            quiet=True,
+            no_color=True,
+            output=None,
+            restore_filename=False,
+        )
+
+        with patch(
+            "secure_string_cipher.cli_args._prompt_password",
+            return_value=password,
+        ):
+            result = cmd_decrypt(args)
+
+        assert result == EXIT_SUCCESS
+        fallback_path = tmp_path / "notes.txt.dec"
+        assert fallback_path.exists()
+        assert fallback_path.read_text() == "data"
 
 
 class TestOverwriteProtection:
