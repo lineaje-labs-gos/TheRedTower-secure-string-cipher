@@ -289,46 +289,46 @@ vault = PassphraseVault(vault_path: str | None = None)
 
 #### Methods
 
-##### store
+##### store_passphrase
 
 Store a passphrase with a label.
 
 ```python
-vault.store(label: str, passphrase: str, master_password: str) -> None
+vault.store_passphrase(label: str, passphrase: str, master_password: str) -> None
 ```
 
-##### retrieve
+##### retrieve_passphrase
 
 Retrieve a stored passphrase.
 
 ```python
-passphrase = vault.retrieve(label: str, master_password: str) -> str
+passphrase = vault.retrieve_passphrase(label: str, master_password: str) -> str
 ```
 
-**Raises:** `KeyError` if label not found, `CryptoError` if wrong master password.
+**Raises:** `ValueError` if label not found or vault cannot be decrypted.
 
 ##### list_labels
 
-List all stored passphrase labels.
+List all stored passphrase labels (requires master password to decrypt the vault).
 
 ```python
-labels = vault.list_labels() -> list[str]
+labels = vault.list_labels(master_password: str) -> list[str]
 ```
 
-##### delete
+##### delete_passphrase
 
 Delete a passphrase entry.
 
 ```python
-vault.delete(label: str, master_password: str) -> None
+vault.delete_passphrase(label: str, master_password: str) -> None
 ```
 
-##### update
+##### update_passphrase
 
 Update an existing passphrase.
 
 ```python
-vault.update(label: str, new_passphrase: str, master_password: str) -> None
+vault.update_passphrase(label: str, new_passphrase: str, master_password: str) -> None
 ```
 
 **Example:**
@@ -339,16 +339,25 @@ from secure_string_cipher import PassphraseVault
 vault = PassphraseVault()
 
 # Store
-vault.store("production-db", "super-secret-123", master_password="VaultMaster!")  # pragma: allowlist secret
+vault.store_passphrase(
+    "production-db", "super-secret-123", master_password="VaultMaster!"  # pragma: allowlist secret
+)  # pragma: allowlist secret
 
 # List
-print(vault.list_labels())  # ["production-db"]
+print(vault.list_labels(master_password="VaultMaster!"))  # ["production-db"]  # pragma: allowlist secret
 
 # Retrieve
-password = vault.retrieve("production-db", master_password="VaultMaster!")  # pragma: allowlist secret
+password = vault.retrieve_passphrase(
+    "production-db", master_password="VaultMaster!"  # pragma: allowlist secret
+)  # pragma: allowlist secret
+
+# Update
+vault.update_passphrase(
+    "production-db", "even-better-456", master_password="VaultMaster!"  # pragma: allowlist secret
+)  # pragma: allowlist secret
 
 # Delete
-vault.delete("production-db", master_password="VaultMaster!")  # pragma: allowlist secret
+vault.delete_passphrase("production-db", master_password="VaultMaster!")  # pragma: allowlist secret
 ```
 
 ---
@@ -527,12 +536,17 @@ secure_wipe(sensitive_data)  # Zeros the memory
 Prevent brute-force attacks with rate limiting.
 
 ```python
-from secure_string_cipher import RateLimiter, RateLimitError
+from secure_string_cipher import rate_limited, RateLimitError
 
-limiter = RateLimiter(
-    max_attempts: int = 5,
-    window_seconds: float = 60.0,
+
+@rate_limited("vault_unlock", get_identifier=lambda vault_path, **_: vault_path)
+def unlock_vault(vault_path: str, password: str) -> None:
+    ...
     lockout_seconds: float = 300.0
+try:
+    unlock_vault("/home/user/.secure-cipher/passphrase_vault.enc", "secret")
+except RateLimitError as exc:
+    print(f"Too many attempts. Wait {exc.wait_seconds:.1f}s")
 )
 ```
 
@@ -581,23 +595,26 @@ def login(username, password):
 Log security events for monitoring and compliance.
 
 ```python
-from secure_string_cipher import AuditLogger, AuditLevel
+from secure_string_cipher import AuditLogger, AuditEvent, AuditLevel
 
-logger = AuditLogger(log_path: str | None = None)
+logger = AuditLogger(log_path: str | None = None, level: AuditLevel = AuditLevel.STANDARD)
 ```
 
 **Methods:**
 
-- `log(event_type: str, level: AuditLevel, details: dict)`: Log an event
-- `get_recent_events(count: int)`: Get recent events
+- `log(event: AuditEvent, success: bool = True, details: dict | None = None)`: Log an event with redaction of sensitive keys
+- `log_auth_failure(operation: str, reason: str = "invalid_credentials", identifier: str | None = None)`: Convenience for auth failures
+- `log_rate_limit(operation: str, wait_seconds: float, identifier: str | None = None)`: Convenience for rate-limit triggers
+- `log_encryption(event_type: AuditEvent, success: bool, file_path: str | None = None, error: str | None = None)`: Convenience for encrypt/decrypt
+- `log_vault_operation(event_type: AuditEvent, success: bool, vault_path: str | None = None, label: str | None = None, error: str | None = None)`: Convenience for vault CRUD
 
 **Example:**
 
 ```python
-from secure_string_cipher import get_audit_logger, AuditLevel
+from secure_string_cipher import AuditEvent, get_audit_logger
 
 logger = get_audit_logger()
-logger.log("encryption", AuditLevel.INFO, {"file": "document.pdf"})
+logger.log(AuditEvent.ENCRYPT_FILE, success=True, details={"file": "document.pdf"})
 ```
 
 ---
@@ -605,16 +622,21 @@ logger.log("encryption", AuditLevel.INFO, {"file": "document.pdf"})
 ### Convenience Functions
 
 ```python
-from secure_string_cipher import audit_event, audit_auth_failure, audit_rate_limit
+from secure_string_cipher import (
+    AuditEvent,
+    audit_auth_failure,
+    audit_event,
+    audit_rate_limit,
+)
 
 # Log general event
-audit_event("file_encrypted", {"filename": "secret.txt"})
+audit_event(AuditEvent.DECRYPT_FILE, success=True, filename="secret.txt")
 
 # Log authentication failure
-audit_auth_failure("user@example.com", reason="invalid_password")
+audit_auth_failure("vault_unlock", reason="invalid_password", identifier="~/.secure-cipher/passphrase_vault.enc")
 
 # Log rate limit triggered
-audit_rate_limit("user@example.com", attempts=5)
+audit_rate_limit("decrypt_file", wait_seconds=30.0, identifier="secret.enc")
 ```
 
 ---

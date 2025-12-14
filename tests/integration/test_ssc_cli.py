@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import subprocess
 import sys
+from importlib.metadata import version
 from unittest.mock import patch
 
 import pytest
@@ -37,7 +38,8 @@ class TestCLIHelp:
             text=True,
         )
         assert result.returncode == 0
-        assert "1.0.30" in result.stdout
+        expected = version("secure-string-cipher")
+        assert expected in result.stdout
 
     def test_encrypt_help(self):
         """ssc encrypt --help should show encrypt help."""

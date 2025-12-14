@@ -2,6 +2,8 @@
 secure_string_cipher - Core encryption functionality
 """
 
+from importlib.metadata import PackageNotFoundError, version
+
 from .audit_log import (
     AuditEvent,
     AuditLevel,
@@ -36,7 +38,10 @@ from .timing_safe import (
 )
 from .utils import ProgressBar, colorize, handle_timeout, secure_overwrite
 
-__version__ = "1.0.30"
+try:
+    __version__ = version("secure-string-cipher")
+except PackageNotFoundError:
+    __version__ = "0.0.0"
 __author__ = "TheRedTower"
 __email__ = "security@avondenecloud.uk"
 
