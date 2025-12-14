@@ -60,6 +60,7 @@ build/
 *.dec
 .write_test
 .github/copilot-instructions.md
+.github/agents/
 
 # macOS
 .DS_Store
