@@ -67,3 +67,4 @@ build/
 
 # Environment variables
 .env
+.venv/
