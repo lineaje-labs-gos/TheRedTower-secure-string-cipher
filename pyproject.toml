@@ -13,11 +13,12 @@ readme = "README.md"
 requires-python = ">=3.12"
 license = { file = "LICENSE" }
 dependencies = [
-    "cryptography>=41.0.0",
-    "argon2-cffi>=25.1.0",
-    "pynacl>=1.5.0",
-    "pyperclip>=1.8.0",
-    "wcwidth>=0.2.0"
+    "cryptography==46.0.3",
+    "argon2-cffi==25.1.0",
+    "pynacl==1.6.1",
+    "pyperclip==1.11.0",
+    "wcwidth==0.2.14",
+    "urllib3==2.6.2",
 ]
 
 classifiers = [
@@ -36,22 +37,23 @@ classifiers = [
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=8.0.0",
-    "pytest-cov>=4.0.0",
-    "pytest-xdist>=3.5.0",        # Parallel test execution
-    "pytest-timeout>=2.2.0",      # Prevent hanging tests
-    "pytest-mock>=3.12.0",        # Better mocking
-    "hypothesis>=6.92.0",         # Property-based testing
-    "mypy>=1.0.0",
-    "ruff>=0.8.0",
-    "detect-secrets>=1.4.0",      # Secret scanning
-    "pip-audit>=2.6.0",           # Vulnerability scanning
+    "pytest==8.4.2",
+    "pytest-cov==7.0.0",
+    "pytest-xdist==3.8.0",        # Parallel test execution
+    "pytest-timeout==2.4.0",      # Prevent hanging tests
+    "pytest-mock==3.15.1",        # Better mocking
+    "hypothesis==6.146.0",        # Property-based testing
+    "mypy==1.18.2",
+    "ruff==0.14.3",
+    "detect-secrets==1.5.0",      # Secret scanning
+    "pip-audit==2.9.0",           # Vulnerability scanning
+    "pre-commit>=4.5.0",
 ]
 test = [
-    "pytest>=8.0.0",
-    "pytest-cov>=4.0.0",
-    "pytest-xdist>=3.5.0",        # Parallel execution
-    "pytest-timeout>=2.2.0",      # Timeout protection
+    "pytest==8.4.2",
+    "pytest-cov==7.0.0",
+    "pytest-xdist==3.8.0",        # Parallel execution
+    "pytest-timeout==2.4.0",      # Timeout protection
 ]
 
 [project.urls]

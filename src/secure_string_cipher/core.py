@@ -15,6 +15,7 @@ import json
 import os
 import secrets
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import BinaryIO
 
 from cryptography.hazmat.backends import default_backend
@@ -41,6 +42,36 @@ from .config import (
     TAG_SIZE,
 )
 from .utils import CryptoError, ProgressBar
+
+_SYSTEM_SYMLINK_ALLOWLIST = {Path("/var")}
+
+
+def _ensure_no_symlink(path: Path, role: str) -> None:
+    """Reject symlinked paths unless explicitly allowlisted."""
+
+    absolute_path = path if path.is_absolute() else path.resolve(strict=False)
+
+    for current in [absolute_path, *absolute_path.parents]:
+        # Stop once we reach filesystem root
+        if current == current.parent:
+            break
+
+        try:
+            if current.is_symlink():
+                resolved = current.resolve(strict=False)
+                allowed = any(
+                    allowed_path == current or resolved == allowed_path
+                    for allowed_path in _SYSTEM_SYMLINK_ALLOWLIST
+                )
+
+                if not allowed:
+                    raise CryptoError(
+                        f"Refusing to use symlinked {role} path: {current}"
+                    )
+        except OSError as exc:
+            # Fail closed if we cannot resolve the path safely
+            raise CryptoError(f"Unable to validate {role} path: {current}") from exc
+
 
 __all__ = [
     "StreamProcessor",
@@ -123,6 +154,7 @@ class StreamProcessor:
 
             try:
                 directory = os.path.dirname(self.path) or "."
+                _ensure_no_symlink(Path(directory), "output parent")
                 test_file = os.path.join(directory, ".write_test")
                 with open(test_file, "wb") as f:
                     f.write(b"test")
@@ -141,6 +173,9 @@ class StreamProcessor:
             CryptoError: If file operations fail
         """
         if isinstance(self.path, (str, bytes, os.PathLike)):
+            path_obj = Path(self.path)
+            role = "input" if self.mode == "rb" else "output"
+            _ensure_no_symlink(path_obj, role)
             self._check_path()
             try:
                 self.file = open(self.path, self.mode)  # type: ignore[assignment]
@@ -548,6 +583,9 @@ def encrypt_file(
     from .timing_safe import add_timing_jitter
 
     try:
+        _ensure_no_symlink(Path(input_path), "input")
+        _ensure_no_symlink(Path(output_path), "output")
+
         salt = secrets.token_bytes(SALT_SIZE)
         nonce = secrets.token_bytes(NONCE_SIZE)
 
@@ -624,6 +662,7 @@ def decrypt_file(
     from .security import sanitize_filename
 
     try:
+        _ensure_no_symlink(Path(input_path), "input")
         with open(input_path, "rb") as f:
             # Check for magic header
             magic = f.read(len(METADATA_MAGIC))

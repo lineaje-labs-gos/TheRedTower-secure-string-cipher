@@ -136,6 +136,49 @@ class TestEncryptDecryptFile:
                 str(nonexistent), "out.enc", "Password123!@#"
             )  # pragma: allowlist secret
 
+    def test_encrypt_rejects_symlink_input(self, tmp_path):
+        """Should reject symlinked input paths."""
+
+        real_file = tmp_path / "real.txt"
+        real_file.write_text("secret")
+        symlink_file = tmp_path / "link.txt"
+        symlink_file.symlink_to(real_file)
+
+        output = tmp_path / "out.enc"
+
+        with pytest.raises(CryptoError, match="symlinked input path"):
+            encrypt_file(str(symlink_file), str(output), "Password123!@#")
+
+    def test_encrypt_rejects_symlink_output(self, tmp_path):
+        """Should reject symlinked output paths."""
+
+        input_file = tmp_path / "input.txt"
+        input_file.write_text("data")
+
+        real_output = tmp_path / "real_out.enc"
+        real_output.touch()
+        symlink_output = tmp_path / "out.enc"
+        symlink_output.symlink_to(real_output)
+
+        with pytest.raises(CryptoError, match="symlinked output path"):
+            encrypt_file(str(input_file), str(symlink_output), "Password123!@#")
+
+    def test_encrypt_rejects_symlink_parent_directory(self, tmp_path):
+        """Should reject outputs under symlinked parent directories."""
+
+        real_dir = tmp_path / "real_dir"
+        real_dir.mkdir()
+        symlink_dir = tmp_path / "link_dir"
+        symlink_dir.symlink_to(real_dir, target_is_directory=True)
+
+        input_file = real_dir / "input.txt"
+        input_file.write_text("payload")
+
+        output_path = symlink_dir / "out.enc"
+
+        with pytest.raises(CryptoError, match="symlinked output path"):
+            encrypt_file(str(input_file), str(output_path), "Password123!@#")
+
 
 class TestKeyCommitment:
     """Tests for key commitment verification."""
