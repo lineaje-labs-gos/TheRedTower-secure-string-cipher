@@ -1,26 +1,26 @@
 [build-system]
-requires = [
-    "hatchling",
-]
+requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
 name = "secure-string-cipher"
-version = "1.0.32+lineaje.1"
+version = "1.0.32"
 authors = [
-    { name = "TheRedTower", email = "security@avondenecloud.uk" },
+  { name = "TheRedTower", email = "security@avondenecloud.uk" },
 ]
 description = "A secure AES-GCM encryption utility with user-friendly features"
 readme = "README.md"
 requires-python = ">=3.12"
+license = { file = "LICENSE" }
 dependencies = [
-    "cryptography==46.0.3",
+    "cryptography==46.0.7",
     "argon2-cffi==25.1.0",
     "pynacl==1.6.1",
     "pyperclip==1.11.0",
     "wcwidth==0.2.14",
-    "urllib3==2.6.2",
+    "urllib3==2.6.3",
 ]
+
 classifiers = [
     "Development Status :: 4 - Beta",
     "Environment :: Console",
@@ -32,68 +32,61 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
     "Topic :: Security :: Cryptography",
-    "Topic :: Utilities",
+    "Topic :: Utilities"
 ]
-maintainers = [
-    { name = "Lineaje DepFixer", email = "221268890+Lineaje-DepFixer@users.noreply.github.com" },
-]
-
-[project.license]
-file = "LICENSE"
 
 [project.optional-dependencies]
 dev = [
     "pytest==8.4.2",
     "pytest-cov==7.0.0",
-    "pytest-xdist==3.8.0",
-    "pytest-timeout==2.4.0",
-    "pytest-mock==3.15.1",
-    "hypothesis==6.146.0",
+    "pytest-xdist==3.8.0",        # Parallel test execution
+    "pytest-timeout==2.4.0",      # Prevent hanging tests
+    "pytest-mock==3.15.1",        # Better mocking
+    "hypothesis==6.146.0",        # Property-based testing
     "mypy==1.18.2",
     "ruff==0.14.3",
-    "detect-secrets==1.5.0",
-    "pip-audit==2.9.0",
+    "detect-secrets==1.5.0",      # Secret scanning
+    "pip-audit==2.9.0",           # Vulnerability scanning
     "pre-commit>=4.5.0",
 ]
 test = [
     "pytest==8.4.2",
     "pytest-cov==7.0.0",
-    "pytest-xdist==3.8.0",
-    "pytest-timeout==2.4.0",
+    "pytest-xdist==3.8.0",        # Parallel execution
+    "pytest-timeout==2.4.0",      # Timeout protection
 ]
 
 [project.urls]
-Homepage = "https://github.com/lineaje-labs-gos/TheRedTower-secure-string-cipher"
+"Homepage" = "https://github.com/TheRedTower/secure-string-cipher"
 "Bug Tracker" = "https://github.com/TheRedTower/secure-string-cipher/issues"
-Documentation = "https://github.com/TheRedTower/secure-string-cipher/wiki"
-Changelog = "https://github.com/TheRedTower/secure-string-cipher/blob/main/CHANGELOG.md"
-Repository = "https://github.com/lineaje-labs-gos/TheRedTower-secure-string-cipher"
-Tracker = "https://github.com/lineaje-labs-gos/TheRedTower-secure-string-cipher/issues"
+"Documentation" = "https://github.com/TheRedTower/secure-string-cipher/wiki"
+"Changelog" = "https://github.com/TheRedTower/secure-string-cipher/blob/main/CHANGELOG.md"
 
 [project.scripts]
 ssc = "secure_string_cipher.cli_args:main"
 
 [tool.ruff]
+# Ruff replaces Black, isort, flake8, and more
 line-length = 88
 target-version = "py312"
 
 [tool.ruff.lint]
 select = [
-    "E",
-    "W",
-    "F",
-    "I",
-    "UP",
-    "B",
-    "C4",
-    "SIM",
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort (import sorting)
+    "UP",  # pyupgrade (modern Python syntax)
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "SIM", # flake8-simplify
 ]
 ignore = [
-    "E501",
-    "SIM102",
-    "SIM105",
-    "SIM117",
-    "UP017",
+    "E501",  # line too long (handled by formatter)
+    "SIM102",  # Use single if statement (readability preference)
+    "SIM105",  # Use contextlib.suppress (explicit is better)
+    "SIM117",  # Combine with statements (readability preference)
+    "UP017",  # Don't convert timezone.utc to datetime.UTC (consistency)
 ]
 
 [tool.ruff.format]
@@ -110,23 +103,14 @@ no_implicit_optional = false
 
 [tool.pytest.ini_options]
 minversion = "8.0"
-testpaths = [
-    "tests",
-]
-python_files = [
-    "test_*.py",
-]
-python_classes = [
-    "Test*",
-]
-python_functions = [
-    "test_*",
-]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
 addopts = [
     "-v",
     "-ra",
-    "-n",
-    "auto",
+    "-n", "auto",
     "--strict-markers",
     "--strict-config",
     "--tb=short",
@@ -150,9 +134,7 @@ filterwarnings = [
 ]
 
 [tool.coverage.run]
-source = [
-    "src",
-]
+source = ["src"]
 branch = true
 parallel = true
 omit = [
